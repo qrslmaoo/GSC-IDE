@@ -23,7 +23,7 @@ A modern, standalone IDE for writing and deploying GSC (Game Script) scripts to 
 2. Clone the repository:
 
 ```bash
-git clone [https://github.com/qrslmaoo/GSC-IDE]
+git clone https://github.com/qrslmaoo/GSC-IDE
 cd GSC-IDE
 ```
 
@@ -49,3 +49,4 @@ If you want changes or a more detailed CONTRIBUTING section, tell me what to add
 # GSC IDE - Python Edition
 
 A modern, standalone IDE for writing and deploying GSC (Game Script) scripts to Call of Duty games via Plutonium launcher.
+
