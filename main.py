@@ -12,8 +12,27 @@ import re
 import tempfile
 import json
 import uuid
+import unicodedata
+from weakref import WeakKeyDictionary
+import traceback
 
 from injection_manager import InjectionManager, TargetGame, InjectionMethod, GameMode
+
+
+def _handle_suppressed(exc: Exception, self_obj=None):
+    try:
+        if self_obj is not None and hasattr(self_obj, 'log_exception'):
+            try:
+                self_obj.log_exception("suppressed exception", exc)
+            except Exception:
+                traceback.print_exc()
+        else:
+            traceback.print_exc()
+    except Exception:
+        try:
+            traceback.print_exc()
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
 
 class GSCSyntaxHighlighter(QSyntaxHighlighter):
@@ -166,7 +185,21 @@ class GSCEditor(QPlainTextEdit):
     def is_modified(self):
         try:
             return self.document().isModified()
-        except Exception:
+        except Exception as e:
+            try:
+                # avoid noisy UI logs from editor internals; print traceback for debugging
+                traceback.print_exc()
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
             return False
     
     def get_default_template(self):
@@ -256,7 +289,19 @@ onPlayerSpawned()
             # repaint viewport to show squiggles
             self.viewport().update()
         except Exception:
-            pass
+            try:
+                traceback.print_exc()
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
     def paintEvent(self, event):
         # call base paint to render text and selections
@@ -324,7 +369,19 @@ onPlayerSpawned()
                     pos = seg_end + 1
             painter.end()
         except Exception:
-            pass
+            try:
+                traceback.print_exc()
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
 
 class GSCIDEWindow(QMainWindow):
@@ -390,11 +447,13 @@ class GSCIDEWindow(QMainWindow):
         self.find_input.setPlaceholderText("Find...")
         self.replace_input = QLineEdit()
         self.replace_input.setPlaceholderText("Replace...")
+        find_prev_btn = QPushButton("Prev")
         find_next_btn = QPushButton("Find")
         replace_btn = QPushButton("Replace")
         close_find_btn = QPushButton("Close")
         find_layout.addWidget(self.find_input)
         find_layout.addWidget(self.replace_input)
+        find_layout.addWidget(find_prev_btn)
         find_layout.addWidget(find_next_btn)
         find_layout.addWidget(replace_btn)
         find_layout.addWidget(close_find_btn)
@@ -412,7 +471,8 @@ class GSCIDEWindow(QMainWindow):
 
         # create initial editor tab
         self.editor = GSCEditor()
-        self.tab_paths = {}  # map editor widget -> filename
+        # map editor widget -> filename (use WeakKeyDictionary to avoid leaking editor objects)
+        self.tab_paths = WeakKeyDictionary()
         self.tab_widget.addTab(self.editor, "Untitled")
         self.tab_paths[self.editor] = None
         vertical_splitter.addWidget(self.tab_widget)
@@ -432,9 +492,23 @@ class GSCIDEWindow(QMainWindow):
             self.autosave_timer.timeout.connect(self.autosave_all)
             self.autosave_timer.start()
             # per-editor autosave timers map
-            self._autosave_timers = {}
-            self.autosave_map = {}  # editor -> autosave filename
-        except Exception:
+            # use weak-keyed dicts so editors can be garbage collected when tabs close
+            self._autosave_timers = WeakKeyDictionary()
+            self.autosave_map = WeakKeyDictionary()  # editor -> autosave filename
+        except Exception as e:
+            try:
+                self.log_exception("autosave setup", e)
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
             self.autosave_dir = None
 
         # Apply saved editor font size if present
@@ -445,8 +519,11 @@ class GSCIDEWindow(QMainWindow):
                 font.setPointSize(int(saved_fs))
                 self.editor.setFont(font)
                 self.editor.update_line_number_area_width(0)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("apply_saved_font_size", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
         # Error/Debug console under the editor (clickable links)
         self.error_console = QTextBrowser()
@@ -466,18 +543,31 @@ class GSCIDEWindow(QMainWindow):
         # cursor updates will be connected per-tab
         try:
             self.tab_widget.currentChanged.connect(lambda idx: self.update_cursor_info())
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("connect currentChanged", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         # Live linting timer (debounced)
         try:
             self.live_lint_timer = QTimer(self)
             self.live_lint_timer.setSingleShot(True)
             self.live_lint_timer.setInterval(500)  # 500ms debounce
             self.live_lint_timer.timeout.connect(self.lint_script)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("live_lint_timer setup", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
         # Find/Replace button wiring
+        try:
+            find_prev_btn.clicked.connect(lambda: self.find_previous())
+        except Exception as e:
+            try:
+                self.log_exception("find_prev_btn.connect", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         find_next_btn.clicked.connect(lambda: self.find_next())
         replace_btn.clicked.connect(lambda: self.replace_one())
         close_find_btn.clicked.connect(lambda: self.find_widget.setVisible(False))
@@ -485,8 +575,11 @@ class GSCIDEWindow(QMainWindow):
         # Install event filter to catch Escape key to close find widget
         try:
             self.tab_widget.installEventFilter(self)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("installEventFilter", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         
         splitter.addWidget(left_panel)
         
@@ -608,8 +701,11 @@ class GSCIDEWindow(QMainWindow):
         self.status_label = QLabel("Ready")
         try:
             self.statusBar.addPermanentWidget(self.status_label)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("statusBar.addPermanentWidget", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         self.statusBar.showMessage("Ready")
 
         # Apply saved theme (dark/light)
@@ -627,7 +723,11 @@ class GSCIDEWindow(QMainWindow):
             self.caps_timer.start(300)
             # set initial state
             self.update_caps_lock()
-        except Exception:
+        except Exception as e:
+            try:
+                self.log_exception("caps_label init", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             self.caps_label = None
         
     def create_menu_bar(self):
@@ -741,6 +841,20 @@ class GSCIDEWindow(QMainWindow):
         replace_action.setShortcut(QKeySequence("Ctrl+H"))
         replace_action.triggered.connect(lambda: self.show_find(False))
         edit_menu.addAction(replace_action)
+
+        # Find Previous action
+        try:
+            find_prev_action = QAction("Find Previous", self)
+            find_prev_action.setShortcut(QKeySequence("Shift+F3"))
+            find_prev_action.triggered.connect(lambda: self.find_previous())
+            edit_menu.addAction(find_prev_action)
+            self.addAction(find_prev_action)
+        except Exception as e:
+            try:
+                self.log_exception("create_menu_bar: find_prev_action", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        edit_menu.addAction(replace_action)
         self.addAction(replace_action)
 
         # View menu (toggle panels)
@@ -756,8 +870,11 @@ class GSCIDEWindow(QMainWindow):
             self.injection_group.setVisible(checked)
             try:
                 self.settings.setValue('panel_injection', checked)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("set panel_injection", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
         toggle_injection.triggered.connect(_set_injection)
         view_menu.addAction(toggle_injection)
 
@@ -771,8 +888,11 @@ class GSCIDEWindow(QMainWindow):
             self.output_group.setVisible(checked)
             try:
                 self.settings.setValue('panel_output', checked)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("set panel_output", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
         toggle_output.triggered.connect(_set_output)
         view_menu.addAction(toggle_output)
 
@@ -814,15 +934,34 @@ class GSCIDEWindow(QMainWindow):
             find_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView))
             find_action.setToolTip("Find (Ctrl+F)")
             toolbar.addAction(find_action)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("toolbar find_action icon", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
         try:
             replace_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
             replace_action.setToolTip("Replace (Ctrl+H)")
             toolbar.addAction(replace_action)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("toolbar replace_action icon", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        try:
+            # Add Find Previous to toolbar for quick access
+            if getattr(self, 'find_prev_btn', None) is None:
+                find_prev_action = QAction("Find Previous", self)
+                find_prev_action.setShortcut(QKeySequence("Shift+F3"))
+                find_prev_action.triggered.connect(lambda: self.find_previous())
+                find_prev_action.setToolTip("Find Previous (Shift+F3)")
+                toolbar.addAction(find_prev_action)
+        except Exception as e:
+            try:
+                self.log_exception("toolbar add find_prev_action", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
         toolbar.addSeparator()
 
@@ -859,6 +998,28 @@ class GSCIDEWindow(QMainWindow):
         self.timer.timeout.connect(self.update_plutonium_path)
         self.timer.start(2000)
 
+    def log_exception(self, context: str, exc: Exception):
+        try:
+            tb = traceback.format_exc()
+            msg = f"{context}: {exc}\n{tb}"
+            try:
+                # prefer structured log in UI
+                self.log(msg, success=False)
+            except Exception:
+                # fallback to printing
+                print(msg)
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
     def update_cursor_info(self):
         try:
             editor = self.current_editor()
@@ -873,10 +1034,16 @@ class GSCIDEWindow(QMainWindow):
                 file_display = os.path.basename(self.tab_paths.get(editor)) if self.tab_paths.get(editor) else "Untitled"
                 if hasattr(self, 'status_label'):
                     self.status_label.setText(f"{file_display} — Ln {line}, Col {column}")
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                try:
+                    self.log_exception("update_cursor_info: status_label update", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                self.log_exception("update_cursor_info", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
     def schedule_live_lint(self):
         """Start or restart the debounced live-lint timer if enabled in settings."""
@@ -892,18 +1059,27 @@ class GSCIDEWindow(QMainWindow):
             except Exception:
                 # fallback: call lint directly
                 self.lint_script()
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("schedule_live_lint", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
     def attach_editor_signals(self, editor: GSCEditor):
         try:
             editor.cursorPositionChanged.connect(self.update_cursor_info)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("attach_editor_signals: cursorPositionChanged", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         try:
             editor.textChanged.connect(self.schedule_live_lint)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("attach_editor_signals: textChanged", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         # per-editor autosave timer: debounce rapid edits
         try:
             if getattr(self, 'autosave_dir', None):
@@ -919,19 +1095,34 @@ class GSCIDEWindow(QMainWindow):
                         timer = self._autosave_timers.get(editor)
                         if timer:
                             timer.start()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        try:
+                            self.log_exception("autosave _on_edit", e)
+                        except Exception as e:
+                            _handle_suppressed(e, locals().get('self', None))
                 editor.textChanged.connect(_on_edit)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                self.log_exception("attach_editor_signals (autosave setup)", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
     def current_editor(self) -> GSCEditor:
         try:
             w = self.tab_widget.currentWidget()
             if isinstance(w, GSCEditor):
                 return w
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
         return getattr(self, 'editor', None)
 
     # --- Linting ---
@@ -956,6 +1147,27 @@ class GSCIDEWindow(QMainWindow):
         pairs = {'}': '{', ')': '(', ']': '['}
 
         for i, line in enumerate(lines, start=1):
+            # Quick checks: control/non-printable characters and suspicious tokens
+            try:
+                for ci, ch in enumerate(line):
+                    if unicodedata.category(ch) == 'Cc' and ch not in ('\t', '\n', '\r'):
+                        errors.append({'line': i, 'col': ci, 'len': 1, 'msg': 'Control/non-printable character detected'})
+                        break
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+            try:
+                # suspicious token heuristic: tokens with length>=4 but zero alphabetic chars
+                toks = re.findall(r"\S+", line)
+                for t in toks:
+                    if len(t) >= 4:
+                        alpha_count = sum(1 for c in t if c.isalpha())
+                        non_ascii = sum(1 for c in t if ord(c) > 127)
+                        if alpha_count == 0 or non_ascii > (len(t) // 2):
+                            col = line.find(t)
+                            errors.append({'line': i, 'col': col if col >= 0 else 0, 'len': max(1, len(t)), 'msg': 'Suspicious token or non-ASCII text'})
+                            break
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             j = 0
             while j < len(line):
                 ch = line[j]
@@ -996,10 +1208,10 @@ class GSCIDEWindow(QMainWindow):
                 editor.setExtraSelections([])
                 try:
                     editor.set_lint_error_positions([])
-                except Exception:
-                    pass
-            except Exception:
-                pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             return True
 
         # build clickable HTML and underline selections
@@ -1025,8 +1237,8 @@ class GSCIDEWindow(QMainWindow):
             # collect positions for editor-level squiggle drawing
             try:
                 pos_list.append((start_pos, length))
-            except Exception:
-                pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             try:
                 cursor = QTextCursor(editor.document())
                 cursor.setPosition(start_pos)
@@ -1057,43 +1269,76 @@ class GSCIDEWindow(QMainWindow):
                 try:
                     # pass positions to editor for custom squiggle drawing
                     editor.set_lint_error_positions(pos_list)
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
                 editor.setExtraSelections(sels)
-            except Exception:
-                pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
         return False
 
     def goto_error(self, url):
         s = url.toString()
-        if s.startswith('line:'):
+        # support both `pos:LINE:COL` anchors (from linter) and legacy `line:LINE`
+        ln = None
+        col = None
+        if s.startswith('pos:'):
+            parts = s.split(':')
+            if len(parts) >= 3:
+                try:
+                    ln = int(parts[1])
+                    col = int(parts[2])
+                except Exception:
+                    return
+        elif s.startswith('line:'):
             try:
-                ln = int(s.split(':',1)[1])
+                ln = int(s.split(':', 1)[1])
             except Exception:
                 return
-            # move cursor to start of line
-            editor = self.current_editor()
-            if editor is None:
-                return
-            block = editor.document().findBlockByNumber(ln-1)
-            if block.isValid():
-                cursor = editor.textCursor()
-                cursor.setPosition(block.position())
-                editor.setTextCursor(cursor)
-                editor.setFocus()
-                # highlight the line briefly
+
+        if ln is None:
+            return
+
+        # move cursor to the target position (line + optional column)
+        editor = self.current_editor()
+        if editor is None:
+            return
+        block = editor.document().findBlockByNumber(ln - 1)
+        if not block.isValid():
+            return
+
+        target_pos = block.position()
+        if col is not None:
+            try:
+                target_pos += int(col)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
+        cursor = editor.textCursor()
+        cursor.setPosition(target_pos)
+        editor.setTextCursor(cursor)
+        editor.setFocus()
+        # highlight the line briefly
+        try:
+            from PyQt6.QtGui import QTextCharFormat
+            sel = QPlainTextEdit.ExtraSelection()
+            fmt = QTextCharFormat()
+            fmt.setBackground(QColor('#3a2b2b'))
+            sel.format = fmt
+            sel.cursor = editor.textCursor()
+            editor.setExtraSelections([sel])
+            QTimer.singleShot(1200, lambda: editor.setExtraSelections([]))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
                 try:
-                    from PyQt6.QtGui import QTextCharFormat
-                    sel = QPlainTextEdit.ExtraSelection()
-                    fmt = QTextCharFormat()
-                    fmt.setBackground(QColor('#3a2b2b'))
-                    sel.format = fmt
-                    sel.cursor = editor.textCursor()
-                    editor.setExtraSelections([sel])
-                    QTimer.singleShot(1200, lambda: editor.setExtraSelections([]))
-                except Exception:
-                    pass
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     def replace_one(self):
         needle = self.find_input.text()
@@ -1112,22 +1357,213 @@ class GSCIDEWindow(QMainWindow):
                 cursor = editor.textCursor()
                 cursor.insertText(repl)
                 editor.centerCursor()
+    
+    def find_next(self):
+        try:
+            needle = self.find_input.text()
+        except Exception:
+            return
+        if not needle:
+            return
+        editor = self.current_editor()
+        if editor is None:
+            return
+        try:
+            found = False
+            try:
+                found = editor.find(needle)
+            except Exception:
+                found = False
+
+            # If not found, try wrapping: move cursor to start and search again
+            if not found:
+                try:
+                    cur = editor.textCursor()
+                    cur.setPosition(0)
+                    editor.setTextCursor(cur)
+                    found = editor.find(needle)
+                    if found:
+                        # optional: inform user that search wrapped
+                        try:
+                            if getattr(self, 'error_console', None):
+                                self.error_console.append(f"Find: wrapped and found '{needle}'")
+                        except Exception as e:
+                            _handle_suppressed(e, locals().get('self', None))
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+            if not found:
+                try:
+                    if getattr(self, 'error_console', None):
+                        self.error_console.append(f"Find: '{needle}' not found")
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+            else:
+                try:
+                    editor.centerCursor()
+                    editor.setFocus()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+    def find_previous(self):
+        try:
+            needle = self.find_input.text()
+        except Exception:
+            return
+        if not needle:
+            return
+        editor = self.current_editor()
+        if editor is None:
+            return
+        try:
+            text = editor.toPlainText()
+            cursor = editor.textCursor()
+            pos = cursor.selectionEnd() if cursor.hasSelection() else cursor.position()
+            # search backwards from just before current position
+            if pos > 0:
+                idx = text.rfind(needle, 0, max(0, pos-1))
+            else:
+                idx = -1
+
+            wrapped = False
+            if idx == -1:
+                # wrap: search from end
+                idx = text.rfind(needle)
+                wrapped = idx != -1
+
+            if idx == -1:
+                try:
+                    if getattr(self, 'error_console', None):
+                        self.error_console.append(f"Find: '{needle}' not found")
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+                return
+
+            # position cursor at found index
+            try:
+                cur = editor.textCursor()
+                cur.setPosition(idx)
+                cur.setPosition(idx + len(needle), QTextCursor.MoveMode.KeepAnchor)
+                editor.setTextCursor(cur)
+                editor.centerCursor()
+                editor.setFocus()
+                if wrapped:
+                    try:
+                        if getattr(self, 'error_console', None):
+                            self.error_console.append(f"Find: wrapped and found '{needle}'")
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+    def show_find(self, find_only=True):
+        try:
+            # if find_only is True we hide the replace input
+            if getattr(self, 'replace_input', None) is not None:
+                self.replace_input.setVisible(not find_only)
+            if getattr(self, 'find_widget', None) is None:
+                return
+            self.find_widget.setVisible(True)
+            try:
+                self.find_input.setFocus()
+                self.find_input.selectAll()
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     
     def update_game_status(self):
-        game = TargetGame(self.game_combo.currentIndex())
-        running = self.injection_manager.is_game_running(game)
-        
-        if running:
-            self.game_status_label.setText("● Game Running")
-            self.game_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        else:
-            self.game_status_label.setText("○ Game Not Running")
-            self.game_status_label.setStyleSheet("color: #888;")
+        try:
+            game = TargetGame(self.game_combo.currentIndex())
+            running = False
+            try:
+                running = self.injection_manager.is_game_running(game)
+            except Exception as e:
+                # log but don't crash the UI
+                try:
+                    self.log(f"Error checking game status: {e}", success=False)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+            if running:
+                self.game_status_label.setText("● Game Running")
+                self.game_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+            else:
+                self.game_status_label.setText("○ Game Not Running")
+                self.game_status_label.setStyleSheet("color: #888;")
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     def update_plutonium_path(self):
         try:
-            plut_path = self.injection_manager.get_plutonium_path()
+            try:
+                plut_path = self.injection_manager.get_plutonium_path()
+            except Exception as e:
+                plut_path = None
+                try:
+                    self.log(f"Error detecting Plutonium path: {e}", success=False)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
             if plut_path:
                 self.plut_path_label.setText(f"✓ Plutonium detected\n{plut_path}")
                 self.plut_path_label.setStyleSheet("color: #4CAF50; padding: 5px;")
@@ -1138,8 +1574,17 @@ class GSCIDEWindow(QMainWindow):
             try:
                 self.plut_path_label.setText("✗ Plutonium detection error")
                 self.plut_path_label.setStyleSheet("color: #f44336; padding: 5px;")
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
     def is_capslock_on(self):
         try:
@@ -1166,8 +1611,17 @@ class GSCIDEWindow(QMainWindow):
                     self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background: transparent; color:#fff; font-weight:bold;")
                 else:
                     self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background: transparent; color:#000; font-weight:bold;")
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
     
     def new_file(self):
         # create a new tab with default template
@@ -1175,7 +1629,7 @@ class GSCIDEWindow(QMainWindow):
     
     def open_file(self):
         filename, _ = QFileDialog.getOpenFileName(
-            self, "Open GSC Script", "", "GSC Files (*.gsc);;All Files (*)"
+            self, "Open GSC Script", "", "GSC/GSCR Files (*.gsc *.gscr);;GSC Files (*.gsc);;GSCR Files (*.gscr);;All Files (*)"
         )
         if filename:
             with open(filename, 'r', encoding='utf-8') as f:
@@ -1202,8 +1656,11 @@ class GSCIDEWindow(QMainWindow):
                     self.tab_widget.setTabText(idx, os.path.basename(cur_path))
                 try:
                     self.remove_autosave_for(editor)
-                except Exception:
-                    pass
+                except Exception as e:
+                    try:
+                        self.log_exception("save_file: remove_autosave_for", e)
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
             except Exception as ex:
                 QMessageBox.warning(self, "Error", f"Failed to save: {ex}")
         else:
@@ -1211,11 +1668,14 @@ class GSCIDEWindow(QMainWindow):
     
     def save_file_as(self):
         filename, _ = QFileDialog.getSaveFileName(
-            self, "Save GSC Script", "", "GSC Files (*.gsc);;All Files (*)"
+            self, "Save GSC Script", "", "GSC/GSCR Files (*.gsc *.gscr);;GSC Files (*.gsc);;GSCR Files (*.gscr);;All Files (*)"
         )
         if filename:
             editor = self.current_editor()
             try:
+                # ensure default extension if user omitted one
+                if not os.path.splitext(filename)[1]:
+                    filename = f"{filename}.gsc"
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(editor.toPlainText())
                 self.tab_paths[editor] = filename
@@ -1228,14 +1688,17 @@ class GSCIDEWindow(QMainWindow):
                 # run linter after save
                 try:
                     self.lint_script()
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             except Exception as ex:
                 QMessageBox.warning(self, "Error", f"Failed to save: {ex}")
             try:
                 self.remove_autosave_for(editor)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("save_file_as: remove_autosave_for", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     # --- Recent files management ---
     def update_recent_menu(self):
@@ -1255,8 +1718,11 @@ class GSCIDEWindow(QMainWindow):
             action = QAction(path, self)
             try:
                 action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("update_recent_menu: set action icon", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             action.setToolTip(path)
             action.triggered.connect(lambda checked, p=path: self.open_recent_file(p))
             self.recent_menu.addAction(action)
@@ -1270,8 +1736,11 @@ class GSCIDEWindow(QMainWindow):
             try:
                 clear_act.setShortcut(QKeySequence("Ctrl+Shift+R"))
                 self.addAction(clear_act)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("update_recent_menu: clear_act shortcut", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     # --- Preferences dialog ---
     def open_preferences(self):
@@ -1325,18 +1794,27 @@ class GSCIDEWindow(QMainWindow):
             try:
                 self.settings.setValue('editor_font_size', font_spin.value())
                 self.set_editor_font_size(font_spin.value() - self.editor.font().pointSize())
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("preferences:on_save editor_font_size", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             try:
                 self.settings.setValue('theme', theme_combo.currentText())
                 self.apply_theme(theme_combo.currentText())
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("preferences:on_save apply_theme", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             # persist live lint preference
             try:
                 self.settings.setValue('lint_live', lint_chk.isChecked())
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("preferences:on_save lint_live", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
             # save overrides
             try:
@@ -1354,22 +1832,34 @@ class GSCIDEWindow(QMainWindow):
                 }
                 try:
                     self.injection_manager.set_custom_paths(overrides)
-                except Exception:
-                    pass
+                except Exception as e:
+                    try:
+                        self.log_exception("preferences:on_save set_custom_paths", e)
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
                 # refresh displayed path immediately after applying overrides
                 try:
                     self.update_plutonium_path()
-                except Exception:
-                    pass
-            except Exception:
-                pass
+                except Exception as e:
+                    try:
+                        self.log_exception("preferences:on_save update_plutonium_path", e)
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
+            except Exception as e:
+                try:
+                    self.log_exception("preferences:on_save save overrides", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
             # if live lint enabled, run an immediate lint to refresh markers
             try:
                 if lint_chk.isChecked():
                     QTimer.singleShot(50, lambda: self.lint_script())
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    self.log_exception("preferences:on_save schedule lint", e)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
             dlg.accept()
 
@@ -1411,40 +1901,85 @@ class GSCIDEWindow(QMainWindow):
         self.update_recent_menu()
     
     def deploy_script(self):
-        game = TargetGame(self.game_combo.currentIndex())
-        method = InjectionMethod(self.method_combo.currentIndex())
-        mode = GameMode(self.mode_combo.currentIndex())
-        script_name = self.script_name.text()
-        editor = self.current_editor()
-        script_content = editor.toPlainText() if editor else ''
-        
-        success, message = self.injection_manager.inject_script(
-            script_content, game, method, mode, script_name
-        )
-        
-        if success:
-            self.log(f"✓ {message}", success=True)
+        try:
+            game = TargetGame(self.game_combo.currentIndex())
+            method = InjectionMethod(self.method_combo.currentIndex())
+            mode = GameMode(self.mode_combo.currentIndex())
+            script_name = self.script_name.text()
+            editor = self.current_editor()
+            script_content = editor.toPlainText() if editor else ''
+
             try:
-                self.lint_script()
-            except Exception:
-                pass
-            QMessageBox.information(
-                self, "Success", 
-                f"{message}\n\nRestart Plutonium to load the script."
-            )
-        else:
-            self.log(f"✗ {message}", success=False)
-            QMessageBox.warning(self, "Deployment Failed", message)
+                success, message = self.injection_manager.inject_script(
+                    script_content, game, method, mode, script_name
+                )
+            except Exception as e:
+                success = False
+                message = f"Injection error: {e}"
+                try:
+                    self.log(message, success=False)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+            if success:
+                self.log(f"✓ {message}", success=True)
+                try:
+                    self.lint_script()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+                QMessageBox.information(
+                    self, "Success",
+                    f"{message}\n\nRestart Plutonium to load the script."
+                )
+            else:
+                self.log(f"✗ {message}", success=False)
+                QMessageBox.warning(self, "Deployment Failed", message)
+        except Exception as e:
+            try:
+                self.log(f"Unexpected error during deployment: {e}", success=False)
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
     
     def open_scripts_folder(self):
-        game = TargetGame(self.game_combo.currentIndex())
-        mode = GameMode(self.mode_combo.currentIndex())
-        path = self.injection_manager.get_script_path(game, mode)
-        
-        if path and os.path.exists(path):
-            os.startfile(path)
-        else:
-            QMessageBox.warning(self, "Error", "Scripts folder not found")
+        try:
+            game = TargetGame(self.game_combo.currentIndex())
+            mode = GameMode(self.mode_combo.currentIndex())
+            try:
+                path = self.injection_manager.get_script_path(game, mode)
+            except Exception as e:
+                path = None
+                try:
+                    self.log(f"Error getting scripts folder: {e}", success=False)
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+            if path and os.path.exists(path):
+                try:
+                    os.startfile(path)
+                except Exception as e:
+                    QMessageBox.warning(self, "Error", f"Unable to open folder: {e}")
+            else:
+                QMessageBox.warning(self, "Error", "Scripts folder not found")
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     # --- Tab management ---
     def new_tab(self, filename: str = None, content: str = None):
@@ -1473,11 +2008,20 @@ class GSCIDEWindow(QMainWindow):
                             # make current and save
                             self.tab_widget.setCurrentIndex(index)
                             self.save_file()
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             self.tab_widget.removeTab(index)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
     
     def show_about(self):
         QMessageBox.about(
@@ -1513,8 +2057,17 @@ class GSCIDEWindow(QMainWindow):
         if sb:
             try:
                 sb.showMessage(message)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
     # Theme handling
     def apply_theme(self, theme_name: str):
@@ -1535,14 +2088,32 @@ class GSCIDEWindow(QMainWindow):
             # dark (default) - restore stored base stylesheet
             try:
                 self.setStyleSheet(self.base_css)
-            except Exception:
-                pass
+            except Exception as e:
+                try:
+                    if hasattr(self, 'log_exception'):
+                        self.log_exception("suppressed exception", e)
+                    else:
+                        traceback.print_exc()
+                except Exception:
+                    try:
+                        traceback.print_exc()
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
         # persist
         try:
             self.settings.setValue('theme', theme_name)
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     def toggle_theme(self):
         new_theme = 'light' if getattr(self, 'current_theme', 'dark') == 'dark' else 'dark'
@@ -1561,10 +2132,19 @@ class GSCIDEWindow(QMainWindow):
             self.editor.update_line_number_area_width(0)
             try:
                 self.settings.setValue('editor_font_size', new_size)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
             except Exception:
-                pass
-        except Exception:
-            pass
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
     def closeEvent(self, event):
         # Persist panel visibility and theme on close
@@ -1572,8 +2152,17 @@ class GSCIDEWindow(QMainWindow):
             self.settings.setValue('panel_injection', self.injection_group.isVisible())
             self.settings.setValue('panel_output', self.output_group.isVisible())
             self.settings.setValue('theme', getattr(self, 'current_theme', 'dark'))
-        except Exception:
-            pass
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
         # If there are modified (unsaved) tabs, preserve autosave artifacts
         try:
             preserve_autosave = False
@@ -1588,8 +2177,8 @@ class GSCIDEWindow(QMainWindow):
                             if w.document().isModified():
                                 preserve_autosave = True
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            _handle_suppressed(e, locals().get('self', None))
                         # If no path assigned, but content differs from default template, consider unsaved
                         try:
                             assigned = self.tab_paths.get(w)
@@ -1608,17 +2197,17 @@ class GSCIDEWindow(QMainWindow):
                                 except Exception:
                                     preserve_autosave = True
                                     break
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
+                        except Exception as e:
+                            _handle_suppressed(e, locals().get('self', None))
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
 
             if preserve_autosave:
                 # ensure latest content is saved for recovery
                 try:
                     self.autosave_all()
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             else:
                 # no unsaved edits: remove autosave artifacts
                 try:
@@ -1630,16 +2219,25 @@ class GSCIDEWindow(QMainWindow):
                             try:
                                 if os.path.exists(p):
                                     os.remove(p)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                _handle_suppressed(e, locals().get('self', None))
                         try:
                             os.remove(self.autosave_index)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                        except Exception as e:
+                            _handle_suppressed(e, locals().get('self', None))
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
         try:
             super().closeEvent(event)
         except Exception:
@@ -1653,8 +2251,8 @@ class GSCIDEWindow(QMainWindow):
                 if key == Qt.Key.Key_Escape and getattr(self, 'find_widget', None) and self.find_widget.isVisible():
                     self.find_widget.setVisible(False)
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
         return super().eventFilter(obj, event)
 
     # --- Autosave and recovery ---
@@ -1671,8 +2269,8 @@ class GSCIDEWindow(QMainWindow):
                 try:
                     if not w.document().isModified():
                         continue
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
                 filename = self.tab_paths.get(w)
                 # reuse existing autosave file for this editor when possible
                 existing = self.autosave_map.get(w)
@@ -1687,8 +2285,8 @@ class GSCIDEWindow(QMainWindow):
                     with open(path, 'w', encoding='utf-8') as f:
                         json.dump(data, f)
                     entries.append({'file': fname, 'filename': filename})
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
 
             # write index
             try:
@@ -1699,10 +2297,10 @@ class GSCIDEWindow(QMainWindow):
                     # remove index if no entries
                     if os.path.exists(self.autosave_index):
                         os.remove(self.autosave_index)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
     def check_autosave_recovery(self):
         try:
@@ -1724,8 +2322,8 @@ class GSCIDEWindow(QMainWindow):
                     with open(p, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     self.new_tab(filename=data.get('filename'), content=data.get('content'))
-                except Exception:
-                    pass
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
             # remove autosave artifacts after recovery
             try:
                 for e in entries:
@@ -1733,14 +2331,14 @@ class GSCIDEWindow(QMainWindow):
                     try:
                         if os.path.exists(p):
                             os.remove(p)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        _handle_suppressed(e, locals().get('self', None))
                 if os.path.exists(self.autosave_index):
                     os.remove(self.autosave_index)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
     def autosave_editor(self, editor: GSCEditor):
         try:
@@ -1761,8 +2359,8 @@ class GSCIDEWindow(QMainWindow):
             try:
                 with open(path, 'w', encoding='utf-8') as f:
                     json.dump(data, f)
-            except Exception:
-                pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             # update index
             try:
                 entries = []
@@ -1771,10 +2369,10 @@ class GSCIDEWindow(QMainWindow):
                     entries.append({'file': fname, 'filename': self.tab_paths.get(ed)})
                 with open(self.autosave_index, 'w', encoding='utf-8') as f:
                     json.dump(entries, f)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
     def remove_autosave_for(self, editor: GSCEditor):
         try:
@@ -1787,8 +2385,8 @@ class GSCIDEWindow(QMainWindow):
             try:
                 if os.path.exists(path):
                     os.remove(path)
-            except Exception:
-                pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
             # rebuild index
             try:
                 entries = []
@@ -1800,18 +2398,38 @@ class GSCIDEWindow(QMainWindow):
                 else:
                     if os.path.exists(self.autosave_index):
                         os.remove(self.autosave_index)
-            except Exception:
-                pass
-        except Exception:
-            pass
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
 
 def main():
     app = QApplication(sys.argv)
-    
+    # Ensure the app uses the bundled icon for the taskbar and windows
+    try:
+        from PyQt6.QtGui import QIcon
+        icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.png')
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+        else:
+            # fall back to a generic icon if not present
+            app.setWindowIcon(QIcon())
+    except Exception as e:
+        _handle_suppressed(e, locals().get('self', None))
+
     window = GSCIDEWindow()
+    try:
+        # also set window icon explicitly
+        from PyQt6.QtGui import QIcon
+        icon_path = os.path.join(os.path.dirname(__file__), 'assets', 'icon.png')
+        if os.path.exists(icon_path):
+            window.setWindowIcon(QIcon(icon_path))
+    except Exception as e:
+        _handle_suppressed(e, locals().get('self', None))
+
     window.show()
-    
+
     sys.exit(app.exec())
 
 
