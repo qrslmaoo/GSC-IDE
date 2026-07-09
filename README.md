@@ -47,6 +47,53 @@ The app writes scripts into the expected Plutonium storage layout under:
 
 You can override script paths per game from Preferences.
 
+<<<<<<< HEAD
+## Screenshots
+
+Add screenshots before publishing the repository:
+
+```text
+docs/screenshots/editor.png
+docs/screenshots/symbols-and-snippets.png
+docs/screenshots/deploy-panel.png
+```
+
+Recommended first screenshot: editor open with the Symbols panel, Snippets dropdown, lint output, and deployment panel visible.
+
+## Requirements
+
+- Windows 10 or Windows 11
+- Python 3.10 or newer
+- Plutonium installed, if you want automatic deployment
+
+Python dependencies:
+
+```text
+PyQt6>=6.6.0
+psutil>=5.9.0
+```
+
+## Install From Source
+
+Clone the repository:
+
+```powershell
+git clone <your-repo-url>
+cd GSC-IDE
+```
+
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+=======
 ## Screenshots
 
 <img width="1480" height="1195" alt="image" src="https://github.com/user-attachments/assets/22b09270-1afe-4020-b75a-2e85b194610b" />
@@ -75,6 +122,7 @@ Install dependencies:
 
 ```powershell
 python -m pip install --upgrade pip
+>>>>>>> bed577f58a426bfc84e6b7f415338b2fd685298d
 pip install -r requirements.txt
 ```
 
