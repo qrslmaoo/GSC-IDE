@@ -4,10 +4,12 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                               QHBoxLayout, QPushButton, QComboBox, QLabel, 
                               QTextEdit, QFileDialog, QSplitter, QMessageBox,
-                              QLineEdit, QGroupBox, QStatusBar, QTextBrowser, QDialog, QFormLayout, QSpinBox, QComboBox as QComboBoxWidget, QStyle, QPlainTextEdit, QCheckBox, QTabWidget)
+                              QLineEdit, QGroupBox, QStatusBar, QTextBrowser, QDialog, QFormLayout, QSpinBox, QComboBox as QComboBoxWidget, QStyle, QPlainTextEdit, QCheckBox, QTabWidget,
+                              QFrame, QListWidget, QListWidgetItem, QToolButton)
 from PyQt6.QtCore import Qt, QTimer, QSettings, QSize, QEvent
 import ctypes
-from PyQt6.QtGui import QFont, QAction, QKeySequence, QSyntaxHighlighter, QTextCharFormat, QColor, QTextCursor
+from PyQt6.QtGui import (QFont, QAction, QKeySequence, QSyntaxHighlighter, QTextCharFormat, QColor, QTextCursor,
+                         QPainter, QPen)
 import re
 import tempfile
 import json
@@ -149,7 +151,7 @@ class GSCEditor(QPlainTextEdit):
         super().__init__(parent)
         
         # Set font
-        font = QFont("Consolas", 11)
+        font = QFont("Cascadia Code", 11)
         font.setFixedPitch(True)
         self.setFont(font)
         
@@ -168,12 +170,16 @@ class GSCEditor(QPlainTextEdit):
         self.update_line_number_area_width(0)
         
         # Set style
+        self.setObjectName("codeEditor")
         self.setStyleSheet("""
-            QPlainTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: none;
-                selection-background-color: #264f78;
+            QPlainTextEdit#codeEditor {
+                background-color: #101112;
+                color: #e7e2d8;
+                border: 1px solid #34373a;
+                border-radius: 4px;
+                padding: 10px;
+                selection-background-color: #4a3a25;
+                selection-color: #ffffff;
             }
         """)
         
@@ -263,7 +269,7 @@ onPlayerSpawned()
         from PyQt6.QtCore import QRect
         
         painter = QPainter(self.line_number_area)
-        painter.fillRect(event.rect(), QColor("#252526"))
+        painter.fillRect(event.rect(), QColor("#121314"))
         
         block = self.firstVisibleBlock()
         block_number = block.blockNumber()
@@ -273,7 +279,7 @@ onPlayerSpawned()
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
-                painter.setPen(QColor("#858585"))
+                painter.setPen(QColor("#7f858b"))
                 painter.drawText(0, int(top), self.line_number_area.width() - 5, 
                                self.fontMetrics().height(), Qt.AlignmentFlag.AlignRight, number)
             
@@ -384,6 +390,30 @@ onPlayerSpawned()
                         _handle_suppressed(e, locals().get('self', None))
 
 
+class GlassBackground(QWidget):
+    """Root widget styled by Qt stylesheets for reliable startup across PyQt builds."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("backgroundRoot")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+
+class GlassPanel(QFrame):
+    def __init__(self, parent=None, raised=True):
+        super().__init__(parent)
+        self.setObjectName("glassPanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+
+
+class StatusPill(QLabel):
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setObjectName("statusPill")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+
 class GSCIDEWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -395,27 +425,337 @@ class GSCIDEWindow(QMainWindow):
         self.setup_timer()
         
     def init_ui(self):
-        self.setWindowTitle("GSC IDE - Call of Duty Script Editor (Plutonium)")
-        self.setGeometry(100, 100, 1400, 900)
-        
-        # Set dark theme colors
-        # Base stylesheet (dark by default) - improved visuals
+        self.setWindowTitle("GSC Studio - Plutonium Script Editor")
+        self.setGeometry(100, 100, 1480, 940)
+
         self.base_css = """
-        QMainWindow { background-color: #151718; }
-        QLabel { color: #e6eef3; }
-        QComboBox, QLineEdit { background-color: #232526; color: #e6eef3; border: 1px solid #3a3d3f; padding: 6px; border-radius: 6px; }
-        QPushButton { background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0b78c0, stop:1 #0961a8); color: white; border:none; padding:8px 12px; border-radius:6px; }
-        QPushButton:hover { background-color: #0f8ee0; }
-        QPlainTextEdit, QTextEdit { background-color: #0f1314; color: #dbe9ee; border: 1px solid #2f3334; }
-        QGroupBox { color: #e6eef3; border: 1px solid #2f3334; border-radius: 8px; margin-top: 12px; padding-top: 12px; }
-        QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 8px; }
-        QMenuBar { background: #171919; color: #e6eef3; }
-        QMenuBar::item:selected { background: #1f8bbf; }
-        QMenu { background: #171919; color: #e6eef3; border: 1px solid #2f3334; }
-        QMenu::item:selected { background: #0f6aa0; }
-        QStatusBar { background: #0f6aa0; color: white; }
-        /* Editor gutter */
-        QWidget#lineNumberArea { background: #0d1111; }
+        QMainWindow {
+            background: #0e0f11;
+            color: #d7dbe0;
+            font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+            font-size: 13px;
+        }
+        QWidget#backgroundRoot {
+            background: #0e0f11;
+        }
+        QFrame#auroraOne, QFrame#auroraTwo, QFrame#auroraThree {
+            background: transparent;
+            border: 0;
+        }
+        QLabel {
+            color: #d7dbe0;
+        }
+        QLabel#heroTitle {
+            color: #f0f2f4;
+            font-size: 14px;
+            font-weight: 750;
+            letter-spacing: 0;
+        }
+        QLabel#heroSubtitle {
+            color: #969da5;
+            font-size: 11px;
+        }
+        QLabel#sectionTitle {
+            color: #f0f2f4;
+            font-size: 14px;
+            font-weight: 800;
+        }
+        QLabel#fieldLabel {
+            color: #8b929a;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .7px;
+            text-transform: uppercase;
+        }
+        QLabel#mutedLabel, QLabel#helperText {
+            color: #9aa1a9;
+            line-height: 140%;
+        }
+        QLabel#statusPill {
+            background-color: #17191c;
+            border: 1px solid #34383d;
+            border-radius: 4px;
+            color: #d3d8de;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 9px;
+        }
+        QLabel#statusPill[state="ok"] {
+            background-color: #10251c;
+            border-color: #276648;
+            color: #98e0b9;
+        }
+        QLabel#statusPill[state="error"] {
+            background-color: #2a1218;
+            border-color: #773141;
+            color: #ffabb7;
+        }
+        QLabel#statusPill[state="idle"] {
+            background-color: #16181b;
+            color: #969da5;
+        }
+        QFrame#glassPanel,
+        QFrame#heroPanel,
+        QFrame#sideCard,
+        QFrame#findBar,
+        QFrame#editorPanel,
+        QFrame#railPanel {
+            background-color: #151719;
+            border: 1px solid #303337;
+            border-radius: 4px;
+        }
+        QFrame#heroPanel {
+            background-color: #131517;
+            border-color: #24282d;
+        }
+        QFrame#editorPanel {
+            background-color: #101112;
+            border-color: #34373a;
+        }
+        QFrame#sideCard {
+            background-color: #151719;
+        }
+        QFrame#findBar {
+            background-color: #191b1e;
+        }
+        QFrame#railPanel {
+            background-color: #101112;
+        }
+        QLabel#railBrand {
+            background-color: #1d2024;
+            border: 1px solid #3e4349;
+            border-radius: 4px;
+            color: #f0f2f4;
+            font-size: 18px;
+            font-weight: 900;
+            padding: 10px;
+        }
+        QLabel#railCaption {
+            color: #858c94;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .8px;
+        }
+        QLabel#deployTitle {
+            color: #f0f2f4;
+            font-size: 16px;
+            font-weight: 850;
+        }
+        QLabel#miniMetric {
+            background-color: #151719;
+            border: 1px solid #30343a;
+            border-radius: 4px;
+            color: #9aa1a9;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 9px;
+        }
+        QPushButton {
+            background-color: #1f2327;
+            color: #e0e4e8;
+            border: 1px solid #434950;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: 700;
+        }
+        QPushButton:hover {
+            background-color: #2a2e33;
+            border-color: #59616a;
+        }
+        QPushButton:pressed {
+            background-color: #373c42;
+        }
+        QPushButton#primaryButton {
+            background-color: #2f5f7a;
+            color: #f3f7fa;
+            border: 1px solid #477d9b;
+            border-radius: 4px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 750;
+        }
+        QPushButton#primaryButton:hover {
+            background-color: #3a6f8d;
+        }
+        QPushButton#secondaryButton {
+            background-color: #16181b;
+            color: #d8dde2;
+        }
+        QPushButton#navButton {
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #c4cad0;
+            font-size: 12px;
+            font-weight: 750;
+            padding: 9px 10px;
+            min-height: 26px;
+            text-align: left;
+        }
+        QPushButton#navButton:hover {
+            background-color: #1d2024;
+            border-color: #373c42;
+            color: #f0f2f4;
+        }
+        QComboBox, QLineEdit {
+            background-color: #11100f;
+            color: #e2e6ea;
+            border: 1px solid #3b4046;
+            border-radius: 4px;
+            padding: 8px 10px;
+            min-height: 22px;
+        }
+        QComboBox:hover, QLineEdit:hover, QComboBox:focus, QLineEdit:focus {
+            background-color: #16181b;
+            border-color: #66707a;
+        }
+        QComboBox QAbstractItemView {
+            background-color: #16181b;
+            color: #e2e6ea;
+            border: 1px solid #3e4349;
+            selection-background-color: #4d5146;
+            outline: 0;
+        }
+        QListWidget {
+            background-color: #11100f;
+            color: #d7dbe0;
+            border: 1px solid #373c42;
+            border-radius: 4px;
+            padding: 4px;
+            outline: 0;
+        }
+        QListWidget::item {
+            border-radius: 3px;
+            padding: 5px 6px;
+        }
+        QListWidget::item:hover {
+            background-color: #1d2024;
+        }
+        QListWidget::item:selected {
+            background-color: #2f3d47;
+            color: #ffffff;
+        }
+        QTabWidget::pane {
+            border: 0;
+            top: -1px;
+        }
+        QTabBar::tab {
+            background-color: #17191c;
+            color: #969da5;
+            border: 1px solid #30343a;
+            border-bottom: 0;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            padding: 6px 4px 5px 10px;
+            margin-right: 4px;
+            font-weight: 700;
+            min-height: 20px;
+        }
+        QTabBar::tab:selected {
+            background-color: #21252a;
+            color: #f0f2f4;
+            border-color: #4a5158;
+        }
+        QTabBar::tab:hover:!selected {
+            background-color: #1d2024;
+            color: #d7dbe0;
+            border-color: #3a4047;
+        }
+        QToolButton#tabCloseButton {
+            background-color: transparent;
+            border: 0;
+            border-radius: 3px;
+            color: #8f969e;
+            margin-left: 2px;
+            margin-right: 4px;
+            padding: 0;
+            min-width: 14px;
+            max-width: 14px;
+            min-height: 14px;
+            max-height: 14px;
+        }
+        QToolButton#tabCloseButton:hover {
+            background-color: #3a2528;
+            color: #ffb7c0;
+        }
+        QToolButton#tabCloseButton:pressed {
+            background-color: #5a2b34;
+            color: #ffffff;
+        }
+        QSplitter::handle {
+            background-color: #2a2e33;
+            border-radius: 2px;
+        }
+        QTextEdit, QTextBrowser {
+            background-color: #11100f;
+            color: #e2e6ea;
+            border: 1px solid #373c42;
+            border-radius: 4px;
+            padding: 9px;
+            selection-background-color: #4d5146;
+        }
+        QTextBrowser#errorConsole {
+            background-color: #171010;
+            color: #ffccd3;
+            border-color: #4a2c32;
+        }
+        QMenuBar {
+            background-color: #131517;
+            color: #d7dbe0;
+            border-bottom: 1px solid #30343a;
+            padding: 3px;
+        }
+        QMenuBar::item {
+            border-radius: 6px;
+            padding: 5px 9px;
+        }
+        QMenuBar::item:selected {
+            background-color: #2a2e33;
+        }
+        QMenu {
+            background-color: #16181b;
+            color: #d7dbe0;
+            border: 1px solid #3e4349;
+            border-radius: 4px;
+            padding: 6px;
+        }
+        QMenu::item {
+            border-radius: 5px;
+            padding: 7px 22px;
+        }
+        QMenu::item:selected {
+            background-color: #32373d;
+        }
+        QToolBar {
+            background-color: #131517;
+            border: 0;
+            border-bottom: 1px solid #30343a;
+            spacing: 6px;
+            padding: 6px;
+        }
+        QToolButton {
+            background-color: #1f2327;
+            border: 1px solid #3e4349;
+            border-radius: 4px;
+            padding: 7px 9px;
+            color: #d7dbe0;
+            font-weight: 700;
+        }
+        QToolButton:hover {
+            background-color: #2a2e33;
+        }
+        QStatusBar {
+            background-color: #131517;
+            color: #9aa1a9;
+            border-top: 1px solid #30343a;
+            padding: 3px;
+        }
+        QStatusBar::item {
+            border: 0;
+        }
+        QWidget#lineNumberArea {
+            background: #121314;
+        }
         """
 
         self.setStyleSheet(self.base_css)
@@ -423,36 +763,77 @@ class GSCIDEWindow(QMainWindow):
         # Menu bar will be created after editor is initialized
         
         # Main widget and layout
-        main_widget = QWidget()
+        main_widget = GlassBackground()
         self.setCentralWidget(main_widget)
-        main_layout = QHBoxLayout(main_widget)
+        self.aurora_layers = []
+        for name in ("auroraOne", "auroraTwo", "auroraThree"):
+            aura = QFrame(main_widget)
+            aura.setObjectName(name)
+            aura.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            aura.lower()
+            self.aurora_layers.append(aura)
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.setContentsMargins(10, 8, 10, 8)
+        main_layout.setSpacing(8)
+
+        hero_panel = GlassPanel(raised=True)
+        hero_panel.setObjectName("heroPanel")
+        hero_layout = QHBoxLayout(hero_panel)
+        hero_layout.setContentsMargins(10, 6, 10, 6)
+        hero_layout.setSpacing(8)
+
+        hero_copy = QVBoxLayout()
+        hero_copy.setContentsMargins(0, 0, 0, 0)
+        hero_copy.setSpacing(0)
+        hero_title = QLabel("GSC Studio")
+        hero_title.setObjectName("heroTitle")
+        hero_copy.addWidget(hero_title)
+        hero_layout.addLayout(hero_copy, 1)
+
+        self.plut_path_label = StatusPill("Plutonium: checking")
+        self.game_status_label = StatusPill("Game: checking")
+        hero_layout.addWidget(self.plut_path_label)
+        hero_layout.addWidget(self.game_status_label)
+
+        main_layout.addWidget(hero_panel)
         
         # Create splitter for resizable panels
         splitter = QSplitter(Qt.Orientation.Horizontal)
         
         # Left panel - Editor
-        left_panel = QWidget()
+        left_panel = GlassPanel()
+        left_panel.setObjectName("editorPanel")
         left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(10)
 
         # Editor header
-        editor_header = QLabel("Code Editor")
-        editor_header.setStyleSheet("font-size: 14px; font-weight: bold; padding: 5px;")
-        left_layout.addWidget(editor_header)
+        editor_header_layout = QHBoxLayout()
+        editor_header = QLabel("Editor")
+        editor_header.setObjectName("sectionTitle")
+        self.editor_info = StatusPill("Line: 1 | Column: 1")
+        editor_header_layout.addWidget(editor_header)
+        editor_header_layout.addStretch()
+        editor_header_layout.addWidget(self.editor_info)
+        left_layout.addLayout(editor_header_layout)
 
         # Find/Replace bar (hidden by default)
-        self.find_widget = QWidget()
-        self.find_widget.setStyleSheet("background-color: #1b2426; border: 1px solid #2f4448; padding:6px; border-radius:6px;")
+        self.find_widget = GlassPanel(raised=False)
+        self.find_widget.setObjectName("findBar")
         find_layout = QHBoxLayout(self.find_widget)
+        find_layout.setContentsMargins(10, 8, 10, 8)
+        find_layout.setSpacing(8)
         self.find_input = QLineEdit()
-        self.find_input.setPlaceholderText("Find...")
+        self.find_input.setPlaceholderText("Find in current script")
         self.replace_input = QLineEdit()
-        self.replace_input.setPlaceholderText("Replace...")
-        find_prev_btn = QPushButton("Prev")
-        find_next_btn = QPushButton("Find")
+        self.replace_input.setPlaceholderText("Replace with")
+        find_prev_btn = QPushButton("Previous")
+        find_next_btn = QPushButton("Next")
         replace_btn = QPushButton("Replace")
         close_find_btn = QPushButton("Close")
-        find_layout.addWidget(self.find_input)
-        find_layout.addWidget(self.replace_input)
+        close_find_btn.setObjectName("secondaryButton")
+        find_layout.addWidget(self.find_input, 2)
+        find_layout.addWidget(self.replace_input, 2)
         find_layout.addWidget(find_prev_btn)
         find_layout.addWidget(find_next_btn)
         find_layout.addWidget(replace_btn)
@@ -462,12 +843,29 @@ class GSCIDEWindow(QMainWindow):
 
         # Vertical splitter for editor and error console
         vertical_splitter = QSplitter(Qt.Orientation.Vertical)
+        vertical_splitter.setObjectName("verticalSplitter")
 
         # Text editor
         # Tabbed editors
         self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.tabCloseRequested.connect(lambda idx: self.close_tab(idx))
+        self.tab_widget.setTabsClosable(False)
+
+        # Autosave state must exist before any editor connects textChanged handlers.
+        self.autosave_dir = None
+        self.autosave_index = None
+        self._autosave_timers = WeakKeyDictionary()
+        self.autosave_map = WeakKeyDictionary()
+        try:
+            self.autosave_dir = os.path.join(tempfile.gettempdir(), 'gscide_autosave')
+            os.makedirs(self.autosave_dir, exist_ok=True)
+            self.autosave_index = os.path.join(self.autosave_dir, 'index.json')
+        except Exception as e:
+            try:
+                self.log_exception("autosave path setup", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+            self.autosave_dir = None
+            self.autosave_index = None
 
         # create initial editor tab
         self.editor = GSCEditor()
@@ -475,6 +873,7 @@ class GSCIDEWindow(QMainWindow):
         self.tab_paths = WeakKeyDictionary()
         self.tab_widget.addTab(self.editor, "Untitled")
         self.tab_paths[self.editor] = None
+        self.install_tab_close_button(self.editor)
         vertical_splitter.addWidget(self.tab_widget)
 
         # attach signals for the initial editor
@@ -482,19 +881,13 @@ class GSCIDEWindow(QMainWindow):
 
         # autosave setup
         try:
-            self.autosave_dir = os.path.join(tempfile.gettempdir(), 'gscide_autosave')
-            os.makedirs(self.autosave_dir, exist_ok=True)
-            self.autosave_index = os.path.join(self.autosave_dir, 'index.json')
-            # check for recovery files
-            self.check_autosave_recovery()
-            self.autosave_timer = QTimer(self)
-            self.autosave_timer.setInterval(10000)  # 10s
-            self.autosave_timer.timeout.connect(self.autosave_all)
-            self.autosave_timer.start()
-            # per-editor autosave timers map
-            # use weak-keyed dicts so editors can be garbage collected when tabs close
-            self._autosave_timers = WeakKeyDictionary()
-            self.autosave_map = WeakKeyDictionary()  # editor -> autosave filename
+            if self.autosave_dir:
+                # check for recovery files
+                self.check_autosave_recovery()
+                self.autosave_timer = QTimer(self)
+                self.autosave_timer.setInterval(10000)  # 10s
+                self.autosave_timer.timeout.connect(self.autosave_all)
+                self.autosave_timer.start()
         except Exception as e:
             try:
                 self.log_exception("autosave setup", e)
@@ -511,38 +904,24 @@ class GSCIDEWindow(QMainWindow):
                         _handle_suppressed(e, locals().get('self', None))
             self.autosave_dir = None
 
-        # Apply saved editor font size if present
-        try:
-            saved_fs = self.settings.value('editor_font_size', None)
-            if saved_fs:
-                font = self.editor.font()
-                font.setPointSize(int(saved_fs))
-                self.editor.setFont(font)
-                self.editor.update_line_number_area_width(0)
-        except Exception as e:
-            try:
-                self.log_exception("apply_saved_font_size", e)
-            except Exception as e:
-                _handle_suppressed(e, locals().get('self', None))
+        self.apply_saved_editor_font_size(self.editor)
 
         # Error/Debug console under the editor (clickable links)
         self.error_console = QTextBrowser()
+        self.error_console.setObjectName("errorConsole")
         self.error_console.setReadOnly(True)
-        self.error_console.setMaximumHeight(200)
+        self.error_console.setMaximumHeight(180)
+        self.error_console.setOpenLinks(False)
         self.error_console.setOpenExternalLinks(False)
-        self.error_console.setStyleSheet("background-color: #120f0f; color: #ff9b9b; border-top:1px solid #2b2b2b; padding:6px;")
         self.error_console.anchorClicked.connect(self.goto_error)
         vertical_splitter.addWidget(self.error_console)
+        vertical_splitter.setSizes([680, 150])
 
         left_layout.addWidget(vertical_splitter)
-
-        # Editor info bar
-        self.editor_info = QLabel("Line: 1 | Column: 1")
-        self.editor_info.setStyleSheet("padding: 5px; background-color: #2b2b2b;")
-        left_layout.addWidget(self.editor_info)
         # cursor updates will be connected per-tab
         try:
             self.tab_widget.currentChanged.connect(lambda idx: self.update_cursor_info())
+            self.tab_widget.currentChanged.connect(lambda idx: self.refresh_symbols())
         except Exception as e:
             try:
                 self.log_exception("connect currentChanged", e)
@@ -557,6 +936,16 @@ class GSCIDEWindow(QMainWindow):
         except Exception as e:
             try:
                 self.log_exception("live_lint_timer setup", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+        try:
+            self.symbol_timer = QTimer(self)
+            self.symbol_timer.setSingleShot(True)
+            self.symbol_timer.setInterval(250)
+            self.symbol_timer.timeout.connect(self.refresh_symbols)
+        except Exception as e:
+            try:
+                self.log_exception("symbol_timer setup", e)
             except Exception as e:
                 _handle_suppressed(e, locals().get('self', None))
 
@@ -586,19 +975,61 @@ class GSCIDEWindow(QMainWindow):
         # Right panel - Controls
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
+
+        # Script intelligence
+        self.code_tools_group = GlassPanel(raised=False)
+        self.code_tools_group.setObjectName("sideCard")
+        code_tools_layout = QVBoxLayout()
+        code_tools_layout.setContentsMargins(12, 12, 12, 12)
+        code_tools_layout.setSpacing(8)
+
+        symbols_title = QLabel("Symbols")
+        symbols_title.setObjectName("sectionTitle")
+        code_tools_layout.addWidget(symbols_title)
+
+        self.symbol_list = QListWidget()
+        self.symbol_list.setMinimumHeight(150)
+        self.symbol_list.setMaximumHeight(240)
+        self.symbol_list.itemActivated.connect(self.goto_symbol_item)
+        self.symbol_list.itemDoubleClicked.connect(self.goto_symbol_item)
+        code_tools_layout.addWidget(self.symbol_list)
+
+        code_tools_layout.addWidget(self.create_field_label("SNIPPET"))
+        snippet_row = QHBoxLayout()
+        snippet_row.setContentsMargins(0, 0, 0, 0)
+        snippet_row.setSpacing(6)
+        self.snippets = self.build_gsc_snippets()
+        self.snippet_combo = QComboBox()
+        self.snippet_combo.addItems(list(self.snippets.keys()))
+        snippet_row.addWidget(self.snippet_combo, 1)
+        insert_snippet_btn = QPushButton("Insert")
+        insert_snippet_btn.clicked.connect(self.insert_snippet)
+        snippet_row.addWidget(insert_snippet_btn)
+        code_tools_layout.addLayout(snippet_row)
+
+        self.code_tools_group.setLayout(code_tools_layout)
+        right_layout.addWidget(self.code_tools_group)
         
         # Injection settings
-        self.injection_group = QGroupBox("Plutonium Injection")
+        self.injection_group = GlassPanel(raised=False)
+        self.injection_group.setObjectName("sideCard")
         injection_layout = QVBoxLayout()
+        injection_layout.setContentsMargins(12, 12, 12, 12)
+        injection_layout.setSpacing(8)
+        injection_title = QLabel("Deploy")
+        injection_title.setObjectName("deployTitle")
+        injection_layout.addWidget(injection_title)
         
         # Info label
-        info_label = QLabel("Optimized for Plutonium launcher\nScripts load automatically on game start")
-        info_label.setStyleSheet("color: #4CAF50; padding: 10px;")
+        info_label = QLabel("Writes the active tab to the selected Plutonium scripts folder.")
+        info_label.setObjectName("helperText")
         info_label.setWordWrap(True)
         injection_layout.addWidget(info_label)
         
         # Game selection
-        injection_layout.addWidget(QLabel("Target Game:"))
+        injection_layout.addWidget(self.create_field_label("TARGET GAME"))
         self.game_combo = QComboBox()
         self.game_combo.addItems([
             "Plutonium T6 (Black Ops 2)",
@@ -609,7 +1040,7 @@ class GSCIDEWindow(QMainWindow):
         injection_layout.addWidget(self.game_combo)
         
         # Method selection
-        injection_layout.addWidget(QLabel("Method:"))
+        injection_layout.addWidget(self.create_field_label("METHOD"))
         self.method_combo = QComboBox()
         self.method_combo.addItems([
             "Plutonium Scripts Folder",
@@ -619,53 +1050,32 @@ class GSCIDEWindow(QMainWindow):
         injection_layout.addWidget(self.method_combo)
         
         # Mode selection
-        injection_layout.addWidget(QLabel("Game Mode:"))
+        injection_layout.addWidget(self.create_field_label("GAME MODE"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Multiplayer", "Zombies", "Both"])
         injection_layout.addWidget(self.mode_combo)
         
         # Script name
-        injection_layout.addWidget(QLabel("Script Name:"))
+        injection_layout.addWidget(self.create_field_label("SCRIPT NAME"))
         self.script_name = QLineEdit("my_mod")
         injection_layout.addWidget(self.script_name)
         
         self.script_name_label = QLabel("Will be saved as: my_mod.gsc")
-        self.script_name_label.setStyleSheet("color: #888; font-size: 10px;")
+        self.script_name_label.setObjectName("mutedLabel")
         injection_layout.addWidget(self.script_name_label)
         self.script_name.textChanged.connect(
             lambda: self.script_name_label.setText(f"Will be saved as: {self.script_name.text()}.gsc")
         )
         
-        # Plutonium path info
-        self.plut_path_label = QLabel()
-        self.update_plutonium_path()
-        injection_layout.addWidget(self.plut_path_label)
-        
-        # Game status
-        self.game_status_label = QLabel()
-        self.update_game_status()
-        injection_layout.addWidget(self.game_status_label)
-        
         # Deploy button
-        deploy_btn = QPushButton("Deploy Script to Plutonium (F5)")
-        deploy_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                padding: 15px;
-                font-size: 14px;
-                font-weight: bold;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        deploy_btn = QPushButton("Deploy Script")
+        deploy_btn.setObjectName("primaryButton")
         deploy_btn.clicked.connect(self.deploy_script)
         injection_layout.addWidget(deploy_btn)
         
         # Open folder button
         open_folder_btn = QPushButton("Open Scripts Folder")
+        open_folder_btn.setObjectName("secondaryButton")
         open_folder_btn.clicked.connect(self.open_scripts_folder)
         injection_layout.addWidget(open_folder_btn)
         
@@ -674,11 +1084,18 @@ class GSCIDEWindow(QMainWindow):
         right_layout.addWidget(self.injection_group)
         
         # Output console
-        self.output_group = QGroupBox("Output")
+        self.output_group = GlassPanel(raised=False)
+        self.output_group.setObjectName("sideCard")
         output_layout = QVBoxLayout()
+        output_layout.setContentsMargins(12, 12, 12, 12)
+        output_layout.setSpacing(8)
+        output_title = QLabel("Console")
+        output_title.setObjectName("sectionTitle")
+        output_layout.addWidget(output_title)
         self.output_console = QTextEdit()
+        self.output_console.setObjectName("outputConsole")
         self.output_console.setReadOnly(True)
-        self.output_console.setMaximumHeight(200)
+        self.output_console.setMinimumHeight(180)
         self.log("GSC IDE initialized. Ready to deploy scripts.")
         output_layout.addWidget(self.output_console)
         self.output_group.setLayout(output_layout)
@@ -687,9 +1104,14 @@ class GSCIDEWindow(QMainWindow):
         splitter.addWidget(right_panel)
         
         # Set splitter proportions
-        splitter.setSizes([900, 500])
-        
-        main_layout.addWidget(splitter)
+        splitter.setSizes([980, 380])
+
+        body_shell = QWidget()
+        body_layout = QHBoxLayout(body_shell)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(splitter, 1)
+        main_layout.addWidget(body_shell, 1)
         
         # Create menu bar now that editor exists
         self.create_menu_bar()
@@ -698,7 +1120,7 @@ class GSCIDEWindow(QMainWindow):
         self.statusBar = QStatusBar()
         self.setStatusBar(self.statusBar)
         # persistent small status label on the right
-        self.status_label = QLabel("Ready")
+        self.status_label = StatusPill("Ready")
         try:
             self.statusBar.addPermanentWidget(self.status_label)
         except Exception as e:
@@ -707,16 +1129,15 @@ class GSCIDEWindow(QMainWindow):
             except Exception as e:
                 _handle_suppressed(e, locals().get('self', None))
         self.statusBar.showMessage("Ready")
+        self.refresh_symbols()
 
-        # Apply saved theme (dark/light)
-        self.current_theme = self.settings.value('theme', 'dark')
+        # Keep legacy theme values compatible while presenting the workbench shell.
+        self.current_theme = self.settings.value('theme', 'workbench')
         self.apply_theme(self.current_theme)
 
         # Caps Lock indicator (always show ON/OFF and adapt to theme)
         try:
-            self.caps_label = QLabel("")
-            # color will be adjusted in update_caps_lock based on theme
-            self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background: transparent; color: #fff; font-weight: bold;")
+            self.caps_label = StatusPill("")
             self.statusBar.addPermanentWidget(self.caps_label)
             self.caps_timer = QTimer()
             self.caps_timer.timeout.connect(self.update_caps_lock)
@@ -729,6 +1150,78 @@ class GSCIDEWindow(QMainWindow):
             except Exception as e:
                 _handle_suppressed(e, locals().get('self', None))
             self.caps_label = None
+        QTimer.singleShot(0, self.position_aurora_layers)
+
+    def refresh_widget_style(self, widget):
+        try:
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
+
+    def create_field_label(self, text):
+        label = QLabel(text)
+        label.setObjectName("fieldLabel")
+        return label
+
+    def create_action_rail(self):
+        rail = GlassPanel(raised=False)
+        rail.setObjectName("railPanel")
+        rail.setFixedWidth(118)
+        layout = QVBoxLayout(rail)
+        layout.setContentsMargins(10, 12, 10, 12)
+        layout.setSpacing(8)
+
+        brand = QLabel("GSC")
+        brand.setObjectName("railBrand")
+        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(brand)
+
+        caption = QLabel("WORKBENCH")
+        caption.setObjectName("railCaption")
+        caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(caption)
+        layout.addSpacing(6)
+
+        actions = [
+            ("New", QStyle.StandardPixmap.SP_FileIcon, self.new_file),
+            ("Open", QStyle.StandardPixmap.SP_DirOpenIcon, self.open_file),
+            ("Save", QStyle.StandardPixmap.SP_DialogSaveButton, self.save_file),
+            ("Find", QStyle.StandardPixmap.SP_FileDialogContentsView, lambda: self.show_find(True)),
+            ("Replace", QStyle.StandardPixmap.SP_FileDialogDetailedView, lambda: self.show_find(False)),
+            ("Deploy", QStyle.StandardPixmap.SP_MediaPlay, self.deploy_script),
+            ("Prefs", QStyle.StandardPixmap.SP_FileDialogInfoView, self.open_preferences),
+        ]
+        for text, icon_id, callback in actions:
+            button = QPushButton(text)
+            button.setObjectName("navButton")
+            button.setIcon(self.style().standardIcon(icon_id))
+            button.setIconSize(QSize(16, 16))
+            button.setToolTip(text)
+            button.clicked.connect(callback)
+            layout.addWidget(button)
+
+        layout.addStretch()
+        build_label = QLabel("LINT ON\nAUTOSAVE")
+        build_label.setObjectName("miniMetric")
+        build_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(build_label)
+        return rail
+
+    def position_aurora_layers(self):
+        try:
+            layers = getattr(self, 'aurora_layers', [])
+            for layer in layers:
+                layer.hide()
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
+
+    def resizeEvent(self, event):
+        try:
+            super().resizeEvent(event)
+        finally:
+            self.position_aurora_layers()
         
     def create_menu_bar(self):
         menubar = self.menuBar()
@@ -781,29 +1274,29 @@ class GSCIDEWindow(QMainWindow):
         
         undo_action = QAction("Undo", self)
         undo_action.setShortcut(QKeySequence.StandardKey.Undo)
-        undo_action.triggered.connect(self.editor.undo)
+        undo_action.triggered.connect(lambda: self.current_editor().undo() if self.current_editor() else None)
         edit_menu.addAction(undo_action)
         
         redo_action = QAction("Redo", self)
         redo_action.setShortcut(QKeySequence.StandardKey.Redo)
-        redo_action.triggered.connect(self.editor.redo)
+        redo_action.triggered.connect(lambda: self.current_editor().redo() if self.current_editor() else None)
         edit_menu.addAction(redo_action)
         
         edit_menu.addSeparator()
         
         copy_action = QAction("Copy", self)
         copy_action.setShortcut(QKeySequence.StandardKey.Copy)
-        copy_action.triggered.connect(self.editor.copy)
+        copy_action.triggered.connect(lambda: self.current_editor().copy() if self.current_editor() else None)
         edit_menu.addAction(copy_action)
         
         cut_action = QAction("Cut", self)
         cut_action.setShortcut(QKeySequence.StandardKey.Cut)
-        cut_action.triggered.connect(self.editor.cut)
+        cut_action.triggered.connect(lambda: self.current_editor().cut() if self.current_editor() else None)
         edit_menu.addAction(cut_action)
         
         paste_action = QAction("Paste", self)
         paste_action.setShortcut(QKeySequence.StandardKey.Paste)
-        paste_action.triggered.connect(self.editor.paste)
+        paste_action.triggered.connect(lambda: self.current_editor().paste() if self.current_editor() else None)
         edit_menu.addAction(paste_action)
         
         # GSC menu
@@ -859,6 +1352,12 @@ class GSCIDEWindow(QMainWindow):
 
         # View menu (toggle panels)
         view_menu = menubar.addMenu("View")
+        refresh_symbols_action = QAction("Refresh Symbols", self)
+        refresh_symbols_action.setShortcut(QKeySequence("Ctrl+Alt+O"))
+        refresh_symbols_action.triggered.connect(self.refresh_symbols)
+        view_menu.addAction(refresh_symbols_action)
+        self.addAction(refresh_symbols_action)
+
         # Injection panel visibility (persisted)
         injection_vis = self.settings.value('panel_injection', True)
         if isinstance(injection_vis, str):
@@ -896,8 +1395,8 @@ class GSCIDEWindow(QMainWindow):
         toggle_output.triggered.connect(_set_output)
         view_menu.addAction(toggle_output)
 
-        # Theme toggle
-        theme_action = QAction("Toggle Theme", self)
+        # Theme action is kept for shortcut compatibility; the workbench shell is the only visual mode.
+        theme_action = QAction("Refresh Workbench Theme", self)
         theme_action.setShortcut(QKeySequence("Ctrl+T"))
         theme_action.triggered.connect(self.toggle_theme)
         view_menu.addAction(theme_action)
@@ -909,6 +1408,11 @@ class GSCIDEWindow(QMainWindow):
 
         # Toolbar for quick actions
         toolbar = self.addToolBar("Main")
+        self.main_toolbar = toolbar
+        toolbar.setMovable(False)
+        toolbar.setFloatable(False)
+        toolbar.setIconSize(QSize(16, 16))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         new_act = QAction("New", self)
         new_act.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
         new_act.setToolTip("New file (Ctrl+N)")
@@ -972,6 +1476,12 @@ class GSCIDEWindow(QMainWindow):
         deploy_act.triggered.connect(self.deploy_script)
         toolbar.addAction(deploy_act)
 
+        refresh_symbols_toolbar = QAction("Symbols", self)
+        refresh_symbols_toolbar.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogListView))
+        refresh_symbols_toolbar.setToolTip("Refresh symbols (Ctrl+Alt+O)")
+        refresh_symbols_toolbar.triggered.connect(self.refresh_symbols)
+        toolbar.addAction(refresh_symbols_toolbar)
+
         # Font size controls
         toolbar.addSeparator()
         inc_font = QAction("A+", self)
@@ -1033,7 +1543,7 @@ class GSCIDEWindow(QMainWindow):
             try:
                 file_display = os.path.basename(self.tab_paths.get(editor)) if self.tab_paths.get(editor) else "Untitled"
                 if hasattr(self, 'status_label'):
-                    self.status_label.setText(f"{file_display} — Ln {line}, Col {column}")
+                    self.status_label.setText(f"{file_display} - Ln {line}, Col {column}")
             except Exception as e:
                 try:
                     self.log_exception("update_cursor_info: status_label update", e)
@@ -1080,6 +1590,13 @@ class GSCIDEWindow(QMainWindow):
                 self.log_exception("attach_editor_signals: textChanged", e)
             except Exception as e:
                 _handle_suppressed(e, locals().get('self', None))
+        try:
+            editor.textChanged.connect(self.schedule_symbols_refresh)
+        except Exception as e:
+            try:
+                self.log_exception("attach_editor_signals: symbols textChanged", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
         # per-editor autosave timer: debounce rapid edits
         try:
             if getattr(self, 'autosave_dir', None):
@@ -1124,6 +1641,478 @@ class GSCIDEWindow(QMainWindow):
                 except Exception as e:
                     _handle_suppressed(e, locals().get('self', None))
         return getattr(self, 'editor', None)
+
+    def apply_saved_editor_font_size(self, editor: GSCEditor):
+        try:
+            saved_fs = self.settings.value('editor_font_size', None)
+            if not saved_fs or editor is None:
+                return
+            font = editor.font()
+            font.setPointSize(int(saved_fs))
+            editor.setFont(font)
+            editor.update_line_number_area_width(0)
+        except Exception as e:
+            try:
+                self.log_exception("apply_saved_editor_font_size", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
+    # --- Script intelligence ---
+    def schedule_symbols_refresh(self):
+        try:
+            timer = getattr(self, 'symbol_timer', None)
+            if timer:
+                timer.start()
+            else:
+                self.refresh_symbols()
+        except Exception as e:
+            try:
+                self.log_exception("schedule_symbols_refresh", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
+    def refresh_symbols(self):
+        try:
+            symbol_list = getattr(self, 'symbol_list', None)
+            if symbol_list is None:
+                return
+            editor = self.current_editor()
+            symbol_list.clear()
+            if editor is None:
+                return
+
+            for label, line_no, kind in self.extract_symbols(editor.toPlainText()):
+                prefix = "#" if kind == "include" else "fn"
+                item = QListWidgetItem(f"{prefix}  {label}    :{line_no}")
+                item.setData(Qt.ItemDataRole.UserRole, line_no)
+                item.setToolTip(f"Go to line {line_no}")
+                symbol_list.addItem(item)
+
+            if symbol_list.count() == 0:
+                item = QListWidgetItem("No functions found")
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                symbol_list.addItem(item)
+        except Exception as e:
+            try:
+                self.log_exception("refresh_symbols", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
+    def extract_symbols(self, text: str):
+        symbols = []
+        reserved = {
+            'if', 'else', 'for', 'while', 'switch', 'case', 'return',
+            'wait', 'waittill', 'thread', 'notify', 'endon'
+        }
+        include_re = re.compile(r'^\s*#include\s+([^;]+);?')
+        func_re = re.compile(r'^\s*(?:function\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^;]*\)\s*(?:\{|$)')
+        for idx, line in enumerate(text.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//'):
+                continue
+
+            include_match = include_re.match(line)
+            if include_match:
+                symbols.append((include_match.group(1).strip(), idx, "include"))
+                continue
+
+            func_match = func_re.match(line)
+            if not func_match:
+                continue
+            name = func_match.group(1)
+            if name.lower() in reserved:
+                continue
+            symbols.append((name, idx, "function"))
+        return symbols
+
+    def goto_symbol_item(self, item):
+        try:
+            line_no = item.data(Qt.ItemDataRole.UserRole)
+            if not line_no:
+                return
+            self.goto_line(int(line_no))
+        except Exception as e:
+            try:
+                self.log_exception("goto_symbol_item", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
+    def goto_line(self, line_no: int, column: int = 0):
+        editor = self.current_editor()
+        if editor is None:
+            return
+        block = editor.document().findBlockByNumber(max(0, line_no - 1))
+        if not block.isValid():
+            return
+        cursor = editor.textCursor()
+        cursor.setPosition(block.position() + max(0, column))
+        editor.setTextCursor(cursor)
+        editor.centerCursor()
+        editor.setFocus()
+
+    def build_gsc_snippets(self):
+        return {
+            "init + connect": (
+                "init()\n"
+                "{\n"
+                "    level thread onPlayerConnect();\n"
+                "}\n\n"
+                "onPlayerConnect()\n"
+                "{\n"
+                "    for(;;)\n"
+                "    {\n"
+                "        level waittill(\"connected\", player);\n"
+                "        player thread onPlayerSpawned();\n"
+                "    }\n"
+                "}\n\n"
+                "onPlayerSpawned()\n"
+                "{\n"
+                "    self endon(\"disconnect\");\n"
+                "    for(;;)\n"
+                "    {\n"
+                "        self waittill(\"spawned_player\");\n"
+                "    }\n"
+                "}\n"
+            ),
+            "main function": (
+                "main()\n"
+                "{\n"
+                "    // entry point\n"
+                "}\n"
+            ),
+            "empty function": (
+                "functionName()\n"
+                "{\n"
+                "    // code\n"
+                "}\n"
+            ),
+            "player spawned thread": (
+                "onPlayerSpawned()\n"
+                "{\n"
+                "    self endon(\"disconnect\");\n"
+                "    for(;;)\n"
+                "    {\n"
+                "        self waittill(\"spawned_player\");\n"
+                "        // spawn logic\n"
+                "    }\n"
+                "}\n"
+            ),
+            "player disconnect endon": (
+                "self endon(\"disconnect\");\n"
+                "self endon(\"death\");\n"
+            ),
+            "thread block": (
+                "self endon(\"disconnect\");\n"
+                "for(;;)\n"
+                "{\n"
+                "    wait 0.05;\n"
+                "}\n"
+            ),
+            "delayed thread": (
+                "threadName()\n"
+                "{\n"
+                "    wait 1;\n"
+                "    // delayed work\n"
+                "}\n"
+            ),
+            "wait loop": (
+                "for(;;)\n"
+                "{\n"
+                "    wait 0.05;\n"
+                "}\n"
+            ),
+            "while defined": (
+                "while(isDefined(target))\n"
+                "{\n"
+                "    wait 0.05;\n"
+                "}\n"
+            ),
+            "foreach players": (
+                "players = level.players;\n"
+                "for(i = 0; i < players.size; i++)\n"
+                "{\n"
+                "    player = players[i];\n"
+                "}\n"
+            ),
+            "for index loop": (
+                "for(i = 0; i < array.size; i++)\n"
+                "{\n"
+                "    value = array[i];\n"
+                "}\n"
+            ),
+            "switch block": (
+                "switch(value)\n"
+                "{\n"
+                "case \"one\":\n"
+                "    break;\n"
+                "default:\n"
+                "    break;\n"
+                "}\n"
+            ),
+            "spawn print": "self iPrintlnBold(\"Ready\");\n",
+            "server print": "iPrintln(\"Message\");\n",
+            "bold all players": "iPrintlnBold(\"Message\");\n",
+            "notify wait": (
+                "self notify(\"event_name\");\n"
+                "self waittill(\"event_name\");\n"
+            ),
+            "level notify wait": (
+                "level notify(\"event_name\");\n"
+                "level waittill(\"event_name\");\n"
+            ),
+            "waittill any": (
+                "self waittill_any(\"death\", \"disconnect\");\n"
+            ),
+            "menu notify pattern": (
+                "self notify(\"menu_opened\");\n"
+                "self waittill(\"menu_closed\");\n"
+            ),
+            "dvar guard": (
+                "if(getDvar(\"dvar_name\") == \"\")\n"
+                "{\n"
+                "    setDvar(\"dvar_name\", \"1\");\n"
+                "}\n"
+            ),
+            "set dvar": "setDvar(\"dvar_name\", \"value\");\n",
+            "get dvar int": "value = getDvarInt(\"dvar_name\");\n",
+            "get dvar float": "value = getDvarFloat(\"dvar_name\");\n",
+            "toggle dvar": (
+                "if(getDvarInt(\"dvar_name\"))\n"
+                "{\n"
+                "    setDvar(\"dvar_name\", \"0\");\n"
+                "}\n"
+                "else\n"
+                "{\n"
+                "    setDvar(\"dvar_name\", \"1\");\n"
+                "}\n"
+            ),
+            "client dvar": "self setClientDvar(\"dvar_name\", \"value\");\n",
+            "hud text": (
+                "hud = self createFontString(\"objective\", 1.4);\n"
+                "hud setPoint(\"CENTER\", \"CENTER\", 0, 0);\n"
+                "hud setText(\"Text\");\n"
+            ),
+            "hud destroy on death": (
+                "hud = self createFontString(\"objective\", 1.4);\n"
+                "hud setPoint(\"CENTER\", \"CENTER\", 0, 0);\n"
+                "hud setText(\"Text\");\n"
+                "self waittill(\"death\");\n"
+                "hud destroy();\n"
+            ),
+            "hud fade": (
+                "hud fadeOverTime(0.5);\n"
+                "hud.alpha = 0;\n"
+            ),
+            "hud typewriter": (
+                "hud = self createFontString(\"objective\", 1.2);\n"
+                "hud setPoint(\"TOP\", \"TOP\", 0, 40);\n"
+                "hud setText(\"Message\");\n"
+            ),
+            "progress bar hud": (
+                "bar = self createBar((1, 1, 1), 120, 8);\n"
+                "bar setPoint(\"CENTER\", \"CENTER\", 0, 80);\n"
+                "bar updateBar(0.5);\n"
+            ),
+            "give weapon": (
+                "self giveWeapon(\"weapon_name\");\n"
+                "self switchToWeapon(\"weapon_name\");\n"
+            ),
+            "take weapon": "self takeWeapon(\"weapon_name\");\n",
+            "give ammo": "self giveMaxAmmo(\"weapon_name\");\n",
+            "weapon check": (
+                "if(self hasWeapon(\"weapon_name\"))\n"
+                "{\n"
+                "    // has weapon\n"
+                "}\n"
+            ),
+            "current weapon": "weapon = self getCurrentWeapon();\n",
+            "freeze controls": "self freezeControls(true);\n",
+            "unfreeze controls": "self freezeControls(false);\n",
+            "player origin": "origin = self.origin;\n",
+            "teleport player": "self setOrigin((0, 0, 0));\n",
+            "set angles": "self setPlayerAngles((0, 0, 0));\n",
+            "trace forward": (
+                "start = self getEye();\n"
+                "end = start + anglesToForward(self getPlayerAngles()) * 1000000;\n"
+                "trace = bulletTrace(start, end, false, self);\n"
+            ),
+            "distance check": (
+                "if(distance(self.origin, target.origin) < 128)\n"
+                "{\n"
+                "    // close enough\n"
+                "}\n"
+            ),
+            "spawn model": (
+                "model = spawn(\"script_model\", origin);\n"
+                "model setModel(\"model_name\");\n"
+            ),
+            "spawn trigger radius": (
+                "trigger = spawn(\"trigger_radius\", origin, 0, 96, 64);\n"
+                "trigger waittill(\"trigger\", player);\n"
+            ),
+            "trigger loop": (
+                "trigger = spawn(\"trigger_radius\", origin, 0, 96, 64);\n"
+                "for(;;)\n"
+                "{\n"
+                "    trigger waittill(\"trigger\", player);\n"
+                "    // touched\n"
+                "}\n"
+            ),
+            "delete entity": (
+                "if(isDefined(entity))\n"
+                "{\n"
+                "    entity delete();\n"
+                "}\n"
+            ),
+            "link entity": (
+                "child linkTo(parent);\n"
+                "child unlink();\n"
+            ),
+            "play fx": (
+                "fx = loadFx(\"fx/path/name\");\n"
+                "playFx(fx, origin);\n"
+            ),
+            "play fx on tag": (
+                "fx = loadFx(\"fx/path/name\");\n"
+                "playFxOnTag(fx, entity, \"tag_origin\");\n"
+            ),
+            "play sound": "self playLocalSound(\"sound_alias\");\n",
+            "sound at position": "playSoundAtPosition(\"sound_alias\", origin);\n",
+            "earthquake": "earthquake(0.5, 2, self.origin, 512);\n",
+            "radius damage": "radiusDamage(origin, 160, 100, 20, self);\n",
+            "array add unique": (
+                "if(!isDefined(array))\n"
+                "{\n"
+                "    array = [];\n"
+                "}\n"
+                "array[array.size] = value;\n"
+            ),
+            "array remove value": (
+                "newArray = [];\n"
+                "for(i = 0; i < array.size; i++)\n"
+                "{\n"
+                "    if(array[i] != value)\n"
+                "    {\n"
+                "        newArray[newArray.size] = array[i];\n"
+                "    }\n"
+                "}\n"
+            ),
+            "struct create": (
+                "data = spawnStruct();\n"
+                "data.name = \"name\";\n"
+                "data.origin = (0, 0, 0);\n"
+            ),
+            "get ent": "entity = getEnt(\"targetname\", \"targetname\");\n",
+            "get ent array": "entities = getEntArray(\"targetname\", \"targetname\");\n",
+            "level var init": (
+                "if(!isDefined(level.var_name))\n"
+                "{\n"
+                "    level.var_name = value;\n"
+                "}\n"
+            ),
+            "self var init": (
+                "if(!isDefined(self.var_name))\n"
+                "{\n"
+                "    self.var_name = value;\n"
+                "}\n"
+            ),
+            "is alive guard": (
+                "if(!isAlive(self))\n"
+                "{\n"
+                "    return;\n"
+                "}\n"
+            ),
+            "defined guard": (
+                "if(!isDefined(value))\n"
+                "{\n"
+                "    return;\n"
+                "}\n"
+            ),
+            "team check": (
+                "if(self.team == \"allies\")\n"
+                "{\n"
+                "    // allies\n"
+                "}\n"
+            ),
+            "host check": (
+                "if(self isHost())\n"
+                "{\n"
+                "    // host-only logic\n"
+                "}\n"
+            ),
+            "debug log": "println(\"DEBUG: message\");\n",
+            "debug player": "self iPrintln(\"DEBUG: \" + value);\n",
+            "assert defined": (
+                "if(!isDefined(value))\n"
+                "{\n"
+                "    iPrintlnBold(\"Missing value\");\n"
+                "    return;\n"
+                "}\n"
+            ),
+            "try cleanup": (
+                "self endon(\"disconnect\");\n"
+                "entity = undefined;\n"
+                "for(;;)\n"
+                "{\n"
+                "    wait 0.05;\n"
+                "}\n"
+            ),
+            "timer seconds": (
+                "timeLeft = 10;\n"
+                "while(timeLeft > 0)\n"
+                "{\n"
+                "    self iPrintln(\"Time: \" + timeLeft);\n"
+                "    wait 1;\n"
+                "    timeLeft--;\n"
+                "}\n"
+            ),
+            "cooldown": (
+                "if(isDefined(self.cooldown) && self.cooldown)\n"
+                "{\n"
+                "    return;\n"
+                "}\n"
+                "self.cooldown = true;\n"
+                "wait 1;\n"
+                "self.cooldown = false;\n"
+            ),
+            "random int": "value = randomInt(10);\n",
+            "random range": "value = randomIntRange(1, 10);\n",
+            "random float": "value = randomFloat(1.0);\n",
+            "vector add": "origin = origin + (0, 0, 64);\n",
+            "angles forward": "forward = anglesToForward(self getPlayerAngles());\n",
+            "normalize vector": "dir = vectorNormalize(target.origin - self.origin);\n",
+            "precache model": "precacheModel(\"model_name\");\n",
+            "precache shader": "precacheShader(\"shader_name\");\n",
+            "precache fx": "level._effect[\"name\"] = loadFx(\"fx/path/name\");\n",
+            "include utility": "#include common_scripts\\utility;\n",
+            "include mp utility": "#include maps\\mp\\_utility;\n",
+            "comment header": (
+                "/*\n"
+                " * Name:\n"
+                " * Purpose:\n"
+                " */\n"
+            ),
+        }
+
+    def insert_snippet(self):
+        try:
+            editor = self.current_editor()
+            if editor is None:
+                return
+            name = self.snippet_combo.currentText()
+            snippet = self.snippets.get(name, "")
+            if not snippet:
+                return
+            cursor = editor.textCursor()
+            cursor.insertText(snippet)
+            editor.setTextCursor(cursor)
+            editor.setFocus()
+            self.schedule_symbols_refresh()
+        except Exception as e:
+            try:
+                self.log_exception("insert_snippet", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
 
     # --- Linting ---
     def lint_script(self):
@@ -1243,7 +2232,7 @@ class GSCIDEWindow(QMainWindow):
                 cursor = QTextCursor(editor.document())
                 cursor.setPosition(start_pos)
                 cursor.setPosition(start_pos + length, QTextCursor.MoveMode.KeepAnchor)
-                sel = QPlainTextEdit.ExtraSelection()
+                sel = QTextEdit.ExtraSelection()
                 fmt = QTextCharFormat()
                 try:
                     # Prefer a wave (squiggly) underline when available for error styling
@@ -1321,7 +2310,7 @@ class GSCIDEWindow(QMainWindow):
         # highlight the line briefly
         try:
             from PyQt6.QtGui import QTextCharFormat
-            sel = QPlainTextEdit.ExtraSelection()
+            sel = QTextEdit.ExtraSelection()
             fmt = QTextCharFormat()
             fmt.setBackground(QColor('#3a2b2b'))
             sel.format = fmt
@@ -1536,11 +2525,12 @@ class GSCIDEWindow(QMainWindow):
                     _handle_suppressed(e, locals().get('self', None))
 
             if running:
-                self.game_status_label.setText("● Game Running")
-                self.game_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+                self.game_status_label.setText("Game running")
+                self.game_status_label.setProperty("state", "ok")
             else:
-                self.game_status_label.setText("○ Game Not Running")
-                self.game_status_label.setStyleSheet("color: #888;")
+                self.game_status_label.setText("Game not running")
+                self.game_status_label.setProperty("state", "idle")
+            self.refresh_widget_style(self.game_status_label)
         except Exception as e:
             try:
                 if hasattr(self, 'log_exception'):
@@ -1565,15 +2555,19 @@ class GSCIDEWindow(QMainWindow):
                     _handle_suppressed(e, locals().get('self', None))
 
             if plut_path:
-                self.plut_path_label.setText(f"✓ Plutonium detected\n{plut_path}")
-                self.plut_path_label.setStyleSheet("color: #4CAF50; padding: 5px;")
+                self.plut_path_label.setText("Plutonium detected")
+                self.plut_path_label.setToolTip(plut_path)
+                self.plut_path_label.setProperty("state", "ok")
             else:
-                self.plut_path_label.setText("✗ Plutonium not detected\nExpected: %localappdata%\\Plutonium\\storage")
-                self.plut_path_label.setStyleSheet("color: #f44336; padding: 5px;")
+                self.plut_path_label.setText("Plutonium not detected")
+                self.plut_path_label.setToolTip("Expected: %localappdata%\\Plutonium\\storage")
+                self.plut_path_label.setProperty("state", "error")
+            self.refresh_widget_style(self.plut_path_label)
         except Exception:
             try:
-                self.plut_path_label.setText("✗ Plutonium detection error")
-                self.plut_path_label.setStyleSheet("color: #f44336; padding: 5px;")
+                self.plut_path_label.setText("Plutonium detection error")
+                self.plut_path_label.setProperty("state", "error")
+                self.refresh_widget_style(self.plut_path_label)
             except Exception as e:
                 try:
                     if hasattr(self, 'log_exception'):
@@ -1600,17 +2594,13 @@ class GSCIDEWindow(QMainWindow):
             on = self.is_capslock_on()
             if not self.caps_label:
                 return
-            # ensure the label is visible in both themes; adapt colors
-            theme = getattr(self, 'current_theme', 'dark')
             if on:
                 self.caps_label.setText("CAPS ON")
-                self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background:#b22222; color:#fff; font-weight:bold;")
+                self.caps_label.setProperty("state", "error")
             else:
                 self.caps_label.setText("CAPS OFF")
-                if theme == 'dark':
-                    self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background: transparent; color:#fff; font-weight:bold;")
-                else:
-                    self.caps_label.setStyleSheet("padding:2px 6px; border-radius:4px; background: transparent; color:#000; font-weight:bold;")
+                self.caps_label.setProperty("state", "idle")
+            self.refresh_widget_style(self.caps_label)
         except Exception as e:
             try:
                 if hasattr(self, 'log_exception'):
@@ -1654,6 +2644,7 @@ class GSCIDEWindow(QMainWindow):
                 idx = self.tab_widget.indexOf(editor)
                 if idx >= 0:
                     self.tab_widget.setTabText(idx, os.path.basename(cur_path))
+                    self.install_tab_close_button(editor)
                 try:
                     self.remove_autosave_for(editor)
                 except Exception as e:
@@ -1683,6 +2674,7 @@ class GSCIDEWindow(QMainWindow):
                 idx = self.tab_widget.indexOf(editor)
                 if idx >= 0:
                     self.tab_widget.setTabText(idx, os.path.basename(filename))
+                    self.install_tab_close_button(editor)
                 self.log(f"Saved: {filename}")
                 self.add_recent_file(filename)
                 # run linter after save
@@ -1751,13 +2743,13 @@ class GSCIDEWindow(QMainWindow):
 
         font_spin = QSpinBox()
         font_spin.setRange(6, 48)
-        font_spin.setValue(self.editor.font().pointSize())
+        current = self.current_editor() or self.editor
+        font_spin.setValue(current.font().pointSize())
         form.addRow("Editor font size:", font_spin)
 
-        theme_combo = QComboBoxWidget()
-        theme_combo.addItems(["dark", "light"])
-        theme_combo.setCurrentText(getattr(self, 'current_theme', 'dark'))
-        form.addRow("Theme:", theme_combo)
+        style_label = QLabel("Workbench Dark")
+        style_label.setObjectName("helperText")
+        form.addRow("Visual style:", style_label)
 
         # Live linting toggle
         lint_chk = QCheckBox("Lint as you type")
@@ -1793,15 +2785,16 @@ class GSCIDEWindow(QMainWindow):
         def on_save():
             try:
                 self.settings.setValue('editor_font_size', font_spin.value())
-                self.set_editor_font_size(font_spin.value() - self.editor.font().pointSize())
+                current_editor = self.current_editor() or self.editor
+                self.set_editor_font_size(font_spin.value() - current_editor.font().pointSize())
             except Exception as e:
                 try:
                     self.log_exception("preferences:on_save editor_font_size", e)
                 except Exception as e:
                     _handle_suppressed(e, locals().get('self', None))
             try:
-                self.settings.setValue('theme', theme_combo.currentText())
-                self.apply_theme(theme_combo.currentText())
+                self.settings.setValue('theme', 'workbench')
+                self.apply_theme('workbench')
             except Exception as e:
                 try:
                     self.log_exception("preferences:on_save apply_theme", e)
@@ -1922,7 +2915,7 @@ class GSCIDEWindow(QMainWindow):
                     _handle_suppressed(e, locals().get('self', None))
 
             if success:
-                self.log(f"✓ {message}", success=True)
+                self.log(f"OK: {message}", success=True)
                 try:
                     self.lint_script()
                 except Exception as e:
@@ -1932,7 +2925,7 @@ class GSCIDEWindow(QMainWindow):
                     f"{message}\n\nRestart Plutonium to load the script."
                 )
             else:
-                self.log(f"✗ {message}", success=False)
+                self.log(f"ERROR: {message}", success=False)
                 QMessageBox.warning(self, "Deployment Failed", message)
         except Exception as e:
             try:
@@ -1982,6 +2975,27 @@ class GSCIDEWindow(QMainWindow):
                     _handle_suppressed(e, locals().get('self', None))
 
     # --- Tab management ---
+    def install_tab_close_button(self, editor: GSCEditor):
+        try:
+            idx = self.tab_widget.indexOf(editor)
+            if idx < 0:
+                return
+            close_btn = QToolButton()
+            close_btn.setObjectName("tabCloseButton")
+            close_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton))
+            close_btn.setIconSize(QSize(8, 8))
+            close_btn.setFixedSize(14, 14)
+            close_btn.setAutoRaise(True)
+            close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            close_btn.setToolTip("Close tab")
+            close_btn.clicked.connect(lambda checked=False, ed=editor: self.close_tab(self.tab_widget.indexOf(ed)))
+            self.tab_widget.tabBar().setTabButton(idx, self.tab_widget.tabBar().ButtonPosition.RightSide, close_btn)
+        except Exception as e:
+            try:
+                self.log_exception("install_tab_close_button", e)
+            except Exception as e:
+                _handle_suppressed(e, locals().get('self', None))
+
     def new_tab(self, filename: str = None, content: str = None):
         editor = GSCEditor()
         if content is None:
@@ -1991,11 +3005,15 @@ class GSCIDEWindow(QMainWindow):
         title = os.path.basename(filename) if filename else "Untitled"
         idx = self.tab_widget.addTab(editor, title)
         self.tab_widget.setCurrentIndex(idx)
+        self.apply_saved_editor_font_size(editor)
+        self.install_tab_close_button(editor)
         self.attach_editor_signals(editor)
         return editor
 
     def close_tab(self, index: int):
         try:
+            if index < 0:
+                return
             widget = self.tab_widget.widget(index)
             if isinstance(widget, GSCEditor):
                 # prompt to save if modified
@@ -2071,38 +3089,23 @@ class GSCIDEWindow(QMainWindow):
 
     # Theme handling
     def apply_theme(self, theme_name: str):
-        theme_name = theme_name or 'dark'
-        self.current_theme = theme_name
-        # simple theme flip: reapply stylesheet with light/dark variants
-        if theme_name == 'light':
-            light_css = """
-            QMainWindow { background-color: #f3f6f8; }
-            QLabel { color: #1b1f23; }
-            QComboBox, QLineEdit { background-color: #ffffff; color: #1b1f23; border: 1px solid #cfd8dc; }
-            QPlainTextEdit, QTextEdit { background-color: #ffffff; color: #1b1f23; border: 1px solid #d0d7db; }
-            QGroupBox { color: #1b1f23; border: 1px solid #d0d7db; }
-            QStatusBar { background-color: #e0e7ea; color: #1b1f23; }
-            """
-            self.setStyleSheet(light_css)
-        else:
-            # dark (default) - restore stored base stylesheet
-            try:
-                self.setStyleSheet(self.base_css)
-            except Exception as e:
-                try:
-                    if hasattr(self, 'log_exception'):
-                        self.log_exception("suppressed exception", e)
-                    else:
-                        traceback.print_exc()
-                except Exception:
-                    try:
-                        traceback.print_exc()
-                    except Exception as e:
-                        _handle_suppressed(e, locals().get('self', None))
-
-        # persist
+        self.current_theme = 'workbench'
         try:
-            self.settings.setValue('theme', theme_name)
+            self.setStyleSheet(self.base_css)
+        except Exception as e:
+            try:
+                if hasattr(self, 'log_exception'):
+                    self.log_exception("suppressed exception", e)
+                else:
+                    traceback.print_exc()
+            except Exception:
+                try:
+                    traceback.print_exc()
+                except Exception as e:
+                    _handle_suppressed(e, locals().get('self', None))
+
+        try:
+            self.settings.setValue('theme', 'workbench')
         except Exception as e:
             try:
                 if hasattr(self, 'log_exception'):
@@ -2116,20 +3119,30 @@ class GSCIDEWindow(QMainWindow):
                     _handle_suppressed(e, locals().get('self', None))
 
     def toggle_theme(self):
-        new_theme = 'light' if getattr(self, 'current_theme', 'dark') == 'dark' else 'dark'
-        self.apply_theme(new_theme)
+        self.apply_theme('workbench')
+        try:
+            self.log("Workbench theme refreshed.")
+        except Exception as e:
+            _handle_suppressed(e, locals().get('self', None))
 
     def set_editor_font_size(self, delta: int):
         try:
-            font = self.editor.font()
+            editor = self.current_editor()
+            if editor is None:
+                return
+            font = editor.font()
             size = font.pointSize()
             if size < 6:
                 size = 11
             new_size = max(6, size + delta)
-            font.setPointSize(new_size)
-            self.editor.setFont(font)
-            # update line number metrics
-            self.editor.update_line_number_area_width(0)
+            for i in range(self.tab_widget.count()):
+                tab_editor = self.tab_widget.widget(i)
+                if not isinstance(tab_editor, GSCEditor):
+                    continue
+                tab_font = tab_editor.font()
+                tab_font.setPointSize(new_size)
+                tab_editor.setFont(tab_font)
+                tab_editor.update_line_number_area_width(0)
             try:
                 self.settings.setValue('editor_font_size', new_size)
             except Exception as e:
@@ -2151,7 +3164,7 @@ class GSCIDEWindow(QMainWindow):
         try:
             self.settings.setValue('panel_injection', self.injection_group.isVisible())
             self.settings.setValue('panel_output', self.output_group.isVisible())
-            self.settings.setValue('theme', getattr(self, 'current_theme', 'dark'))
+            self.settings.setValue('theme', 'workbench')
         except Exception as e:
             try:
                 if hasattr(self, 'log_exception'):
@@ -2246,7 +3259,7 @@ class GSCIDEWindow(QMainWindow):
     def eventFilter(self, obj, event):
         # Close the find widget on Escape when editor has focus
         try:
-            if event.type() == QEvent.KeyPress:
+            if event.type() == QEvent.Type.KeyPress:
                 key = event.key()
                 if key == Qt.Key.Key_Escape and getattr(self, 'find_widget', None) and self.find_widget.isVisible():
                     self.find_widget.setVisible(False)
@@ -2435,3 +3448,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
