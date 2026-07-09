@@ -49,15 +49,14 @@ You can override script paths per game from Preferences.
 
 ## Screenshots
 
-Add screenshots before publishing the repository:
+<img width="1480" height="1195" alt="image" src="https://github.com/user-attachments/assets/22b09270-1afe-4020-b75a-2e85b194610b" />
 
-```text
-docs/screenshots/editor.png
-docs/screenshots/symbols-and-snippets.png
-docs/screenshots/deploy-panel.png
-```
+<img width="401" height="368" alt="image" src="https://github.com/user-attachments/assets/72f1c7bd-55ef-4b93-aec3-6beb9a16c4ca" />
 
-Recommended first screenshot: editor open with the Symbols panel, Snippets dropdown, lint output, and deployment panel visible.
+<img width="406" height="464" alt="image" src="https://github.com/user-attachments/assets/7d9600a3-00e2-4395-aa2d-f9f860131695" />
+
+<img width="363" height="206" alt="image" src="https://github.com/user-attachments/assets/13dd9bed-eac6-4715-8f40-8e6dffdc0ab3" />
+
 
 ## Requirements
 
@@ -70,22 +69,6 @@ Python dependencies:
 ```text
 PyQt6>=6.6.0
 psutil>=5.9.0
-```
-
-## Install From Source
-
-Clone the repository:
-
-```powershell
-git clone <your-repo-url>
-cd GSC-IDE
-```
-
-Create and activate a virtual environment:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\activate
 ```
 
 Install dependencies:
