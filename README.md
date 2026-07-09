@@ -1,50 +1,192 @@
-# GSC IDE - Python Edition
+# GSC IDE
 
-A modern, standalone IDE for writing and deploying GSC (Game Script) scripts to Call of Duty games via the Plutonium launcher.
+A standalone PyQt6 editor for writing, linting, navigating, and deploying GSC scripts for Plutonium-supported Call of Duty titles.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
-![PyQt6](https://img.shields.io/badge/PyQt6-6.6+-green.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![PyQt6](https://img.shields.io/badge/PyQt6-6.6%2B-green)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+## Overview
+
+GSC IDE is built for fast Plutonium script work: open multiple scripts, jump through functions, insert common GSC patterns, lint as you type, and deploy the active tab into the correct Plutonium scripts folder.
+
+It is intentionally a desktop tool, not a web app. The UI stays close to a traditional IDE: menu bar, toolbar, tabs, line numbers, symbol navigation, output console, and deployment controls.
 
 ## Features
 
-- 🎨 Modern Dark Theme UI
-- 📝 Syntax highlighting for GSC
-- 🚀 One-click deployment to Plutonium (where applicable)
-- 🎮 Multi-game support: T6, T5, T4, IW5
-- 🗂️ Multi-tab editor (edit multiple scripts at once)
-- 💾 Autosave & crash-recovery (experimental): unsaved edits are periodically written to a temp folder for recovery
-- 🐞 Simple linter with clickable errors and editor underlines
+- Multi-tab GSC editor with line numbers and syntax highlighting.
+- Live linter for bracket, string, suspicious token, and control-character issues.
+- Clickable lint output that jumps directly to the problem line and column.
+- Symbols panel for `#include` entries and function declarations.
+- One-click symbol navigation with double-click or Enter.
+- 80+ built-in GSC snippets for lifecycle hooks, threads, HUD, dvars, weapons, FX, triggers, arrays, debug helpers, and utility patterns.
+- Find and replace with wraparound search.
+- Autosave and crash recovery for unsaved tabs.
+- Recent files menu.
+- Active-tab aware edit actions for undo, redo, cut, copy, paste, save, and close.
+- Plutonium install detection.
+- One-click deployment to Plutonium script folders.
+- Per-game custom script path overrides from Preferences.
+- Game running status indicators.
 
-## Installation
+## Supported Games
 
-1. Install Python 3.10+ (from python.org)
+The deployment panel supports these Plutonium targets:
 
-2. Clone the repository:
+- T6 - Call of Duty: Black Ops II
+- T5 - Call of Duty: Black Ops
+- T4 - Call of Duty: World at War
+- IW5 - Call of Duty: Modern Warfare 3
 
-```bash
-git clone https://github.com/yourusername/gsc-ide-python.git
-cd gsc-ide-python
+The app writes scripts into the expected Plutonium storage layout under:
+
+```text
+%LOCALAPPDATA%\Plutonium\storage
 ```
 
-3. (Recommended) Create a virtual environment and install dependencies:
+You can override script paths per game from Preferences.
 
-```bash
+## Screenshots
+
+Add screenshots before publishing the repository:
+
+```text
+docs/screenshots/editor.png
+docs/screenshots/symbols-and-snippets.png
+docs/screenshots/deploy-panel.png
+```
+
+Recommended first screenshot: editor open with the Symbols panel, Snippets dropdown, lint output, and deployment panel visible.
+
+## Requirements
+
+- Windows 10 or Windows 11
+- Python 3.10 or newer
+- Plutonium installed, if you want automatic deployment
+
+Python dependencies:
+
+```text
+PyQt6>=6.6.0
+psutil>=5.9.0
+```
+
+## Install From Source
+
+Clone the repository:
+
+```powershell
+git clone <your-repo-url>
+cd GSC-IDE
+```
+
+Create and activate a virtual environment:
+
+```powershell
 python -m venv .venv
-\.venv\Scripts\activate      
+.\.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-4. Run the app:
+Run the app:
 
-```bash
+```powershell
 python main.py
 ```
 
-### Notes
-- On Windows the app attempts to detect Plutonium in the expected %localappdata%\Plutonium\storage path. You can override paths via Preferences.
-- Autosave files are written to your system temp directory under a `gscide_autosave` folder. The recovery feature is experimental.
+## Build A Windows EXE
 
-If you want changes or a more detailed CONTRIBUTING section, tell me what to add.
+Install PyInstaller:
 
+```powershell
+pip install pyinstaller
+```
 
+Build with the included spec file:
+
+```powershell
+pyinstaller GSC-IDE.spec
+```
+
+The built executable will be created under:
+
+```text
+dist\GSC-IDE.exe
+```
+
+## Basic Use
+
+1. Open or create a `.gsc` file.
+2. Use the Symbols panel to jump between includes and functions.
+3. Insert common patterns from the Snippet dropdown.
+4. Fix any lint issues shown in the lower output panel.
+5. Select the target game, deployment method, and game mode.
+6. Set the script name.
+7. Click Deploy Script or press F5.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+N` | New script |
+| `Ctrl+O` | Open script |
+| `Ctrl+S` | Save |
+| `Ctrl+Shift+S` | Save as |
+| `Ctrl+F` | Find |
+| `Ctrl+H` | Replace |
+| `Shift+F3` | Find previous |
+| `Ctrl+W` | Close tab |
+| `F5` | Deploy active script |
+| `Ctrl+,` | Preferences |
+| `Ctrl+Alt+O` | Refresh symbols |
+| `Ctrl+Shift+I` | Toggle deployment panel |
+| `Ctrl+Shift+O` | Toggle output panel |
+
+## Project Layout
+
+```text
+.
+|-- main.py                # PyQt6 application, editor, UI, linting, snippets
+|-- injection_manager.py   # Plutonium path detection and script deployment
+|-- gsc_highlighter.py     # Standalone syntax highlighter module
+|-- requirements.txt       # Runtime dependencies
+|-- GSC-IDE.spec           # PyInstaller build spec
+|-- assets/                # App icon assets
+`-- CHANGELOG.md
+```
+
+## Notes
+
+- Direct memory injection and network injection are present as method choices, but the supported deployment path is the Plutonium scripts folder method.
+- Autosave recovery files are stored in your system temp directory under `gscide_autosave`.
+- This project is not affiliated with Plutonium, Activision, Treyarch, Infinity Ward, or Sledgehammer Games.
+
+## Roadmap
+
+- Project folder explorer.
+- Better GSC completion and call tips.
+- Snippet search and categories.
+- Configurable formatter rules.
+- Theme preferences.
+- Release builds with signed Windows binaries.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, test the app before submitting, and avoid broad rewrites unless they remove real complexity.
+
+Before opening a pull request:
+
+```powershell
+python -m py_compile main.py injection_manager.py gsc_highlighter.py
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
